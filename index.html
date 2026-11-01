@@ -380,6 +380,7 @@ function renderSortie(box){
   const o = myOrder;
   const state = { area: o?.area || '', ship: o?.ship_code || me.ship_code || '', eq: new Set(o?.equipment || me.equipment || []), promote: !!o?.promote, up: {...(o?.stat_up||{})}, wing: o?.wingman_id || '', fa: o?.free_action || '' };
   const missing = me.state === 'missing';
+  const canPromote = ep.no > (me.joined_no ?? 1);  // first episode after joining: no promotion (server enforces too)
 
   box.innerHTML = `<div class="sh">あなたの艦</div><div class="card">
       <h2 style="font-size:22px">${esc(me.rank)}　${esc(me.name)}</h2>
@@ -392,7 +393,7 @@ function renderSortie(box){
       <div class="field"><span class="lbl">出撃エリア</span><div class="choices two" id="sArea"></div></div>
       <div class="field"><span class="lbl">艦艇<small>今の艦に乗り続けるなら無料。乗り換えは功績Pが要ります</small></span><div class="choices two" id="sShip"></div></div>
       <div class="field"><span class="lbl">装備<small>4つまで。持っている装備は無料</small></span><div class="choices two" id="sEq"></div></div>
-      <div class="field"><label class="choice"><input type="checkbox" id="sPromote" ${me.rank==='大佐'?'disabled':''}><span><span class="t">昇進する（${esc(me.rank)}→${esc(RANKS[RANKS.indexOf(me.rank)+1]||'—')}、功績P ${RANK_COST[me.rank]??'—'}）</span><span class="d">昇進すると能力値を合計2上げられます</span></span></label><div id="sUp"></div></div>
+      <div class="field"><label class="choice"><input type="checkbox" id="sPromote" ${me.rank==='大佐'||!canPromote?'disabled':''}><span><span class="t">昇進する（${esc(me.rank)}→${esc(RANKS[RANKS.indexOf(me.rank)+1]||'—')}、功績P ${RANK_COST[me.rank]??'—'}）</span><span class="d">${canPromote?'昇進すると能力値を合計2上げられます':'昇進できるのは、参加した回の次の回からです'}</span></span></label><div id="sUp"></div></div>
       <div class="field"><label for="sWing">僚艦（任意）<small>同じエリアに出撃すると心強い。お互いに指定し合うとさらに有利</small></label><select id="sWing"><option value="">指定しない</option>${roster.filter(r=>r.id!==me.id && r.state==='active').map(r=>`<option value="${r.id}">${esc(r.rank)} ${esc(r.name)}</option>`).join('')}</select></div>
       <div class="field"><label for="sFa">フリーアクション（任意）<small>艦がどう動くかの宣言。300文字まで。状況に合っていると少し有利になり、紙面に載ることもあります</small></label><textarea id="sFa" maxlength="300"></textarea><div class="note" id="sFaCount" style="text-align:right;margin:2px 0 0"></div></div>
       <div class="cost" id="sCost"></div>
@@ -401,6 +402,7 @@ function renderSortie(box){
 
   $('#sWing').value = state.wing ? String(state.wing) : '';
   $('#sFa').value = state.fa;
+  if (!canPromote){ state.promote = false; state.up = {}; }
   $('#sPromote').checked = state.promote;
 
   const rankIdx = () => RANKS.indexOf(me.rank) + (state.promote?1:0);
