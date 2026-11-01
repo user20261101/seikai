@@ -44,7 +44,13 @@ section{margin-top:30px}
 .enemy{display:grid;grid-template-columns:132px 1fr;gap:12px;align-items:start}
 .enemy img{width:132px;height:80px;object-fit:contain;background:#fefefe;border-radius:4px;padding:4px}
 @media(max-width:480px){.enemy{grid-template-columns:96px 1fr}.enemy img{width:96px;height:62px}.brief{grid-template-columns:72px 1fr}.brief .face{width:72px;height:92px}.mast .logo{width:64px;height:64px}}
-.map{display:block;width:100%;height:auto;margin-top:6px}
+.map{position:relative;margin:6px 0 0;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:#000}
+.map img{display:block;width:100%;height:auto}
+.map .pin{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border-radius:99px;background:rgba(8,10,14,.78);border:1px solid rgba(255,255,255,.28);white-space:nowrap;font-size:13px;color:#fff;line-height:1.4}
+.map .pin b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--glow);color:#0d1015;font-family:var(--f-head);font-size:15px}
+.map .pin.d-最高 b{background:var(--bad)}.map .pin.d-高 b{background:var(--warn)}.map .pin.d-低 b{background:var(--good)}
+.map figcaption{position:absolute;right:10px;bottom:6px;font-size:12px;letter-spacing:.3em;color:rgba(255,255,255,.7)}
+@media(max-width:480px){.map .pin{font-size:11px;padding:2px 7px 2px 3px;gap:4px}.map .pin b{width:19px;height:19px;font-size:12px}}
 .areas{display:grid;gap:10px}
 .area{border:1px solid var(--rule);border-radius:6px;padding:12px 14px;background:var(--panel)}
 .area h3{font-size:17px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -262,17 +268,15 @@ function epHead(){
 }
 
 function mapSvg(areas){
-  const pos = {A:[120,92],B:[480,70],C:[110,248],D:[470,250]};
-  const nm = Object.fromEntries(areas.map(a=>[a.code,a.name]));
-  const node = k => { const [x,y]=pos[k]; return `<g><circle cx="${x}" cy="${y}" r="46" fill="none" stroke="var(--sub)" stroke-dasharray="4 4"/><text x="${x}" y="${y-4}" text-anchor="middle" font-family="Noto Serif JP,serif" font-weight="900" font-size="22" fill="var(--glow)">${k}</text><text x="${x}" y="${y+18}" text-anchor="middle" font-size="12" fill="var(--ink)">${esc(nm[k]||'')}</text></g>`; };
-  const dots = Array.from({length:26},(_,i)=>`<circle cx="${60+((i*37)%110)}" cy="${300+((i*23)%28)}" r="${1+(i%3)}" fill="var(--sub)"/>`).join('');
-  return `<svg class="map" viewBox="0 0 600 340" role="img" aria-label="${esc(ep.content.place)}の戦略マップ。A〜Dの4宙域">
-    <ellipse cx="300" cy="170" rx="250" ry="120" fill="none" stroke="var(--rule)"/>
-    <ellipse cx="300" cy="170" rx="130" ry="62" fill="none" stroke="var(--rule)"/>
-    <circle cx="300" cy="170" r="26" fill="var(--panel2)" stroke="var(--sub)"/>
-    <ellipse cx="300" cy="170" rx="44" ry="10" fill="none" stroke="var(--sub)"/>
-    ${dots}${['A','B','C','D'].map(node).join('')}
-    <text x="580" y="328" text-anchor="end" font-size="12" letter-spacing="3" fill="var(--sub)">${esc((ep.content.place||'').toUpperCase())}</text></svg>`;
+  // Background art per episode (content.map_image), area pins laid over it in % so labels stay readable at any width
+  const c = ep.content;
+  const src = c.map_image || 'img/map1.webp', srcS = c.map_image ? c.map_image : 'img/map1_s.webp';
+  const pos = c.map_pos || {A:[22,30],B:[83,36],C:[17,68],D:[83,70]};
+  const pins = areas.filter(a=>pos[a.code]).map(a=>{ const [x,y]=pos[a.code];
+    return `<div class="pin d-${esc(a.danger)}" style="left:${x}%;top:${y}%"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></div>`; }).join('');
+  return `<figure class="map" role="img" aria-label="${esc(c.place)}の戦略マップ。${areas.map(a=>a.code+' '+a.name).join('、')}">
+    <img src="${esc(src)}" srcset="${esc(srcS)} 800w, ${esc(src)} 1600w" sizes="(max-width:760px) 100vw, 760px" alt="" width="1600" height="899" loading="lazy">
+    ${pins}<figcaption>${esc(c.place||'')}</figcaption></figure>`;
 }
 
 function renderPaper(box){
