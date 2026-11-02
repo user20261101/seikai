@@ -46,7 +46,8 @@ section{margin-top:30px}
 @media(max-width:480px){.enemy{grid-template-columns:96px 1fr}.enemy img{width:96px;height:62px}.brief{grid-template-columns:72px 1fr}.brief .face{width:72px;height:92px}.mast .logo{width:64px;height:64px}}
 .map{position:relative;margin:6px 0 0;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:#000}
 .map img{display:block;width:100%;height:auto}
-.map .pin{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border-radius:99px;background:rgba(8,10,14,.78);border:1px solid rgba(255,255,255,.28);white-space:nowrap;font-size:13px;color:#fff;line-height:1.4}
+.map .pin{position:absolute;transform:translateY(-50%);max-width:47%;display:flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border-radius:99px;background:rgba(8,10,14,.78);border:1px solid rgba(255,255,255,.28);font-size:13px;color:#fff;line-height:1.35}
+.map .pin b{flex:none}
 .map .pin b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--glow);color:#0d1015;font-family:var(--f-head);font-size:15px}
 .map .pin.d-最高 b{background:var(--bad)}.map .pin.d-高 b{background:var(--warn)}.map .pin.d-低 b{background:var(--good)}
 .map figcaption{position:absolute;right:10px;bottom:6px;font-size:12px;letter-spacing:.3em;color:rgba(255,255,255,.7)}
@@ -145,6 +146,24 @@ input[type=email],input[type=password]{width:100%;background:var(--bg);border:1p
 .roster li{break-inside:avoid;padding:5px 0;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;gap:8px}
 .roster li.me b{color:var(--glow)}
 .roster .r{color:var(--sub);font-size:12.5px}
+/* results */
+.headline{font-size:20px;text-wrap:wrap}
+.gauge{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;margin-top:14px;font-size:13px;color:var(--sub)}
+.gbar{position:relative;height:10px;border-radius:5px;background:var(--rule)}
+.gbar i{position:absolute;inset:0 auto 0 0;border-radius:5px;background:var(--glow)}
+.gbar b{position:absolute;top:-3px;width:2px;height:16px;background:var(--ink);opacity:.7}
+.gv b{color:var(--ink);font-size:16px}
+.res{margin-left:auto;font-size:12.5px;font-family:var(--f-body);font-weight:700;border:1px solid currentColor;border-radius:3px;padding:0 8px}
+.r-大成功{color:var(--good)}.r-成功{color:var(--glow)}.r-苦戦{color:var(--warn)}.r-失敗{color:var(--bad)}
+.out{font-weight:700}.o-good{color:var(--good)}.o-glow{color:var(--glow)}.o-warn{color:var(--warn)}.o-bad{color:var(--bad)}.o-sub{color:var(--sub)}
+details summary{cursor:pointer;color:var(--glow);font-size:13.5px;margin-top:8px}
+tr.mine td{background:rgba(159,216,234,.08)}
+.mvpname{font-family:var(--f-head);font-size:19px}
+.rank{margin:0;padding-left:1.8em;font-size:14px}
+.rank li{padding:5px 0;border-bottom:1px solid var(--rule)}
+.rank li .r{color:var(--sub);font-size:12.5px;margin-left:10px}
+.rank li.mine b{color:var(--glow)}
+.newtag{display:inline-block;font-size:11px;font-weight:700;color:#0d1015;background:var(--warn);border-radius:3px;padding:0 6px;vertical-align:2px}
 </style>
 </head>
 <body>
@@ -179,7 +198,7 @@ const whaleImg = n => /大型/.test(n)?IMG.whale_big:/小型/.test(n)?IMG.whale_
 const imgSrc = (v, fallback) => v && /^(https:|data:image\/)/.test(v) ? v : fallback;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let sb, session = null, ep = null, me = null, myOrder = null, roster = [], myResults = [];
+let sb, session = null, ep = null, last = null, gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [];
 const AUTH_JA = m => /Invalid login credentials/i.test(m) ? 'メールアドレスかパスワードが違います。'
   : /already registered|already been registered/i.test(m) ? 'このメールアドレスは登録済みです。「ログイン」から入ってください。'
   : /Password should be at least/i.test(m) ? 'パスワードは6文字以上にしてください。'
@@ -246,6 +265,11 @@ async function loadAll(){
   const { data: e, error } = await sb.from('episodes').select('id,no,title,status,deadline,content').eq('status','open').order('no',{ascending:false}).limit(1).maybeSingle();
   if (error){ $('#view').innerHTML = `<p class="msg err">紙面を読み込めませんでした（${esc(error.message)}）。</p>`; return; }
   ep = e;
+  const [lr, er] = await Promise.all([
+    sb.from('episodes').select('id,no,title,content,report').eq('status','done').order('no',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('episodes').select('id,no').neq('status','draft')]);
+  last = lr.data || null;
+  epNo = Object.fromEntries((er.data||[]).map(x=>[x.id,x.no]));
   const r = await sb.from('characters').select('id,name,rank,state').order('id');
   roster = r.data || [];
   me = null; myOrder = null; myResults = [];
@@ -270,12 +294,14 @@ function epHead(){
 function mapSvg(areas){
   // Background art per episode (content.map_image), area pins laid over it in % so labels stay readable at any width
   const c = ep.content;
-  const src = c.map_image || 'img/map1.webp', srcS = c.map_image ? c.map_image : 'img/map1_s.webp';
+  const src = c.map_image, srcS = c.map_image_s || c.map_image;
   const pos = c.map_pos || {A:[22,30],B:[83,36],C:[17,68],D:[83,70]};
   const pins = areas.filter(a=>pos[a.code]).map(a=>{ const [x,y]=pos[a.code];
-    return `<div class="pin d-${esc(a.danger)}" style="left:${x}%;top:${y}%"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></div>`; }).join('');
+    const side = x < 50 ? `left:${Math.max(1.5, x-12)}%` : `right:${Math.max(1.5, 100-x-12)}%`;
+    return `<div class="pin d-${esc(a.danger)}" style="${side};top:${y}%"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></div>`; }).join('');
   return `<figure class="map" role="img" aria-label="${esc(c.place)}の戦略マップ。${areas.map(a=>a.code+' '+a.name).join('、')}">
-    <img src="${esc(src)}" srcset="${esc(srcS)} 800w, ${esc(src)} 1600w" sizes="(max-width:760px) 100vw, 760px" alt="" width="1600" height="899" loading="lazy">
+    ${src ? `<img src="${esc(src)}" srcset="${esc(srcS)} 800w, ${esc(src)} 1600w" sizes="(max-width:760px) 100vw, 760px" alt="" width="1600" height="899" loading="lazy">`
+      : `<svg viewBox="0 0 1600 899" aria-hidden="true" style="display:block;width:100%;height:auto"><rect width="1600" height="899" fill="#05070a"/>${Array.from({length:90},(_,i)=>`<circle cx="${(i*379)%1600}" cy="${(i*211)%899}" r="${1+(i%3)*.8}" fill="#9aa4b2" opacity="${.25+(i%4)*.15}"/>`).join('')}<ellipse cx="800" cy="450" rx="560" ry="250" fill="none" stroke="#3a4554" stroke-width="2"/><ellipse cx="800" cy="450" rx="330" ry="140" fill="none" stroke="#3a4554" stroke-width="2"/><circle cx="800" cy="450" r="92" fill="#1a212b" stroke="#97a2b1" stroke-width="3"/><ellipse cx="800" cy="450" rx="160" ry="30" fill="none" stroke="#97a2b1" stroke-width="3"/></svg>`}
     ${pins}<figcaption>${esc(c.place||'')}</figcaption></figure>`;
 }
 
@@ -285,10 +311,11 @@ function renderPaper(box){
   const areas = c.areas.map(a=>`<article class="area"><h3><span class="code">${esc(a.code)}</span>${esc(a.name)}</h3>
      <div class="tags"><span class="tag d-${esc(a.danger)}">危険度 ${esc(a.danger)}</span><span class="tag">推奨能力 ${a.rec.map(k=>esc(SNAME[k])).join('・')}</span><span class="tag">有効な装備 ${a.eq.map(esc).join('・')}</span>${a.main?'<span class="tag">主戦場</span>':''}</div>
      <p>${esc(a.desc)}</p></article>`).join('');
-  const ships = c.ships.map(s=>`<tr><td>${(s.img||IMG[s.code])?`<img class="shipimg" src="${imgSrc(s.img,IMG[s.code])}" alt="${esc(s.name)}">`:''}<b>${esc(s.name)}</b><br><span class="note" style="margin:0">${esc(s.class)}　${esc(s.desc)}</span></td><td class="num">${esc(s.atk)}</td><td class="num">${esc(s.def)}</td><td class="num">${esc(s.mob)}</td><td class="num">${esc(s.cost)}</td></tr>`).join('');
-  const eqs = c.equipment.map(q=>`<tr><td><b>${esc(q.name)}</b><br><span class="note" style="margin:0">${esc(q.desc)}</span></td><td class="num">${esc(q.type)}</td><td class="num">${esc(q.cost)}</td></tr>`).join('');
-  const enemies = (c.enemies||[]).map(x=>`<div class="enemy"><img src="${imgSrc(x.img,whaleImg(x.name))}" alt="${esc(x.name)}"><div><b>${esc(x.name)}</b><p style="margin:2px 0">${esc(x.desc)}</p><p class="hint" style="margin:0">${esc(x.hint||'')}</p></div></div>`).join('') + (c.unknown_teaser!==false?`<div class="enemy"><img src="${IMG.whale_unknown}" alt="未確認艦のシルエット"><div><b>未確認艦</b><p style="margin:2px 0">交戦宙域の奥で、正体不明の大型反応が確認されている。</p></div></div>`:'');
-  box.innerHTML = epHead() + `
+  const ships = c.ships.map(s=>`<tr><td>${(s.img||IMG[s.code])?`<img class="shipimg" src="${imgSrc(s.img,IMG[s.code])}" alt="${esc(s.name)}">`:''}<b>${esc(s.name)}</b>${s.new?' <span class="newtag">新型</span>':''}<br><span class="note" style="margin:0">${esc(s.class)}　${esc(s.desc)}</span></td><td class="num">${esc(s.atk)}</td><td class="num">${esc(s.def)}</td><td class="num">${esc(s.mob)}</td><td class="num">${esc(s.cost)}</td></tr>`).join('');
+  const eqs = c.equipment.map(q=>`<tr><td><b>${esc(q.name)}</b>${q.new?' <span class="newtag">新装備</span>':''}<br><span class="note" style="margin:0">${esc(q.desc)}</span></td><td class="num">${esc(q.type)}</td><td class="num">${esc(q.cost)}</td></tr>`).join('');
+  const enemies = (c.enemies||[]).map(x=>`<div class="enemy"><img src="${imgSrc(x.img,whaleImg(x.name))}" alt="${esc(x.name)}"><div><b>${esc(x.name)}</b>${x.new?' <span class="newtag">新型</span>':''}<p style="margin:2px 0">${esc(x.desc)}</p><p class="hint" style="margin:0">${esc(x.hint||'')}</p></div></div>`).join('') + (c.unknown_teaser!==false?`<div class="enemy"><img src="${IMG.whale_unknown}" alt="未確認艦のシルエット"><div><b>未確認艦</b><p style="margin:2px 0">交戦宙域の奥で、正体不明の大型反応が確認されている。</p></div></div>`:'');
+  box.innerHTML = epHead() + renderReport() + `
+    ${last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':''}
     <img class="hero" src="${imgSrc(c.hero,IMG.hero)}" alt="クジラ型艦と交戦する宙航軍の艦隊">
     <div class="sh">導入</div>
     <div class="panel"><p class="intro" style="margin:0">${esc(c.intro)}</p>
@@ -332,12 +359,38 @@ function renderHome(box){
       ${o?`<p style="margin:10px 0 0;font-size:14px">${esc(o.area)} ${esc(areaName(o.area))}／${esc(shipName(o.ship_code))}${o.equipment?.length?'／装備 '+o.equipment.length+'個':''}${o.free_action?`<br><span style="color:var(--sub)">「${esc(o.free_action)}」</span>`:''}</p>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><a class="btn" href="#sortie" style="text-decoration:none">${o?'出撃指示を見直す':'出撃指示を出す'}</a><a class="btn ghost" href="#paper" style="text-decoration:none">紙面を読む</a></div>
     </div></section>`:'<section><p class="note">現在、受付中の作戦はありません。</p></section>'}
-    <section><div class="sh">戦績</div>${myResults.length?`<div class="tbl"><table><thead><tr><th>話</th><th>エリア</th><th>結果</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead><tbody>${myResults.map(r=>`<tr><td>${r.episode_id}</td><td>${esc(r.area||'')}</td><td>${esc(r.outcome)}${r.highlight?`<br><span class="note" style="margin:0">${esc(r.highlight)}</span>`:''}</td><td class="num">${r.kills}</td><td class="num">+${r.merit_gained}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">まだ戦績はありません。最初の作戦の結果が出ると、ここに載ります。</p>'}</section>`;
+    <section><div class="sh">戦績</div>${myResults.length?`<div class="tbl"><table><thead><tr><th>話</th><th>エリア</th><th>結果</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead><tbody>${myResults.map(r=>`<tr><td>第${epNo[r.episode_id]??'?'}話</td><td>${esc(r.area||'')}</td><td>${esc(r.outcome)}${r.highlight?`<br><span class="note" style="margin:0">${esc(r.highlight)}</span>`:''}</td><td class="num">${r.kills}</td><td class="num">+${r.merit_gained}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">まだ戦績はありません。最初の作戦の結果が出ると、ここに載ります。</p>'}</section>`;
 }
 
 /* ---------- roster (名簿) ---------- */
 function renderRoster(box){
   box.innerHTML = `<div class="sh">艦長名簿　${roster.length}名</div><ul class="roster">${roster.map(r=>`<li class="${me&&r.id===me.id?'me':''}"><b>${esc(r.name)}</b><span class="r">${esc(r.rank)}${r.state!=='active'?'・'+({missing:'消息不明',lost:'戦没',retired:'退役'}[r.state]||''):''}</span></li>`).join('')}</ul>`;
+}
+
+/* ---------- previous episode results (紙面の冒頭) ---------- */
+const OUT_CLS = {'帰還':'good','損傷':'glow','大破':'warn','撃沈':'bad','消息不明':'bad','未出撃':'sub'};
+function renderReport(){
+  const rp = last?.report; if (!rp || !rp.judge) return '';
+  const areas = rp.judge.areas || [], ent = rp.entries || [], byId = Object.fromEntries(ent.map(x=>[x.id,x]));
+  const g0 = rp.judge.gauge_before, g1 = rp.judge.gauge_after;
+  const lc = last.content || {}, aname = c => (lc.areas||[]).find(a=>a.code===c)?.name || '';
+  const row = x => `<tr class="${me&&x.id===me.id?'mine':''}"><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.ship)}</td><td><span class="out o-${OUT_CLS[x.outcome]||'sub'}">${esc(x.outcome)}</span></td><td class="num">${x.kills}</td><td class="num">+${x.merit}</td></tr>`;
+  const mine = me && byId[me.id];
+  return `<section class="report" style="margin-top:0"><div class="sh">前回の結果　第${last.no}話「${esc(last.title)}」</div>
+    <div class="panel">
+      <h3 class="headline">${esc(rp.headline||'')}</h3>
+      <p style="margin:8px 0 0">${esc(rp.summary||'')}</p>
+      ${g0!=null?`<div class="gauge" role="img" aria-label="戦況ゲージ ${g0}から${g1}"><span class="gl">戦況</span><div class="gbar"><i style="width:${g1}%"></i><b style="left:${g0}%"></b></div><span class="gv">${g0} → <b>${g1}</b></span></div>
+      <div class="note" style="margin-top:2px">右へ伸びるほど航宙軍が優勢。最終話の結末を左右します</div>`:''}
+      ${mine?`<div class="order-now">あなたの結果：${esc(mine.area||'')} ${esc(aname(mine.area))}／<span class="out o-${OUT_CLS[mine.outcome]||'sub'}">${esc(mine.outcome)}</span>　撃沈 ${mine.kills}　功績P +${mine.merit}</div>`:''}
+    </div>
+    <div class="areas" style="margin-top:12px">${areas.map(a=>{ const list = ent.filter(x=>x.area===a.code);
+      return `<article class="area"><h3><span class="code">${esc(a.code)}</span>${esc(a.name)}<span class="res r-${esc(a.result)}">${esc(a.result)}</span></h3>
+      <p>${esc(rp.area_text?.[a.code]||'')}</p>
+      ${list.length?`<details><summary>戦闘記録（${list.length}名）</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>艦長</th><th>艦</th><th>結果</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div></details>`:''}</article>`; }).join('')}</div>
+    ${rp.mvp?`<div class="panel mvp" style="margin-top:12px"><div class="sh" style="margin:0 0 4px">最活躍</div><b class="mvpname">${esc(rp.mvp.rank)}　${esc(rp.mvp.name)}</b><p style="margin:4px 0 0;font-size:14px">${esc(rp.mvp.text)}</p></div>`:''}
+    ${(rp.ranking||[]).length?`<div class="sh" style="margin-top:22px">活躍ランキング</div><ol class="rank">${rp.ranking.map(id=>byId[id]).filter(Boolean).map(x=>`<li class="${me&&x.id===me.id?'mine':''}"><b>${esc(x.name)}</b><span class="r">${esc(x.area)} ${esc(aname(x.area))}　撃沈${x.kills}　+${x.merit}P</span></li>`).join('')}</ol>`:''}
+  </section>`;
 }
 
 /* ---------- paper (紙面) ---------- */
