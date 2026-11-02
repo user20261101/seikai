@@ -356,7 +356,7 @@ function renderHome(box){
     ${ep?`<section><div class="sh">今回の作戦</div><div class="panel">
       <div class="todo"><div><b style="font-family:var(--f-head);font-size:17px">第${ep.no}話　${esc(ep.title)}</b><div class="note" style="margin:0">出撃締切 ${esc(dlText())}</div></div>
       ${o?'<span class="pill ok">出撃指示 提出済み</span>':'<span class="pill ng">出撃指示 未提出</span>'}</div>
-      ${o?`<p style="margin:10px 0 0;font-size:14px">${esc(o.area)} ${esc(areaName(o.area))}／${esc(shipName(o.ship_code))}${o.equipment?.length?'／装備 '+o.equipment.length+'個':''}${o.free_action?`<br><span style="color:var(--sub)">「${esc(o.free_action)}」</span>`:''}</p>`:''}
+      ${o?`<p style="margin:10px 0 0;font-size:14px">${esc(o.area)} ${esc(areaName(o.area))}／${esc(shipName(o.ship_code))}${o.equipment?.length?'／装備 '+o.equipment.length+'個':''}</p>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><a class="btn" href="#sortie" style="text-decoration:none">${o?'出撃指示を見直す':'出撃指示を出す'}</a><a class="btn ghost" href="#paper" style="text-decoration:none">紙面を読む</a></div>
     </div></section>`:'<section><p class="note">現在、受付中の作戦はありません。</p></section>'}
     <section><div class="sh">戦績</div>${myResults.length?`<div class="tbl"><table><thead><tr><th>話</th><th>エリア</th><th>結果</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead><tbody>${myResults.map(r=>`<tr><td>第${epNo[r.episode_id]??'?'}話</td><td>${esc(r.area||'')}</td><td>${esc(r.outcome)}${r.highlight?`<br><span class="note" style="margin:0">${esc(r.highlight)}</span>`:''}</td><td class="num">${r.kills}</td><td class="num">+${r.merit_gained}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note" style="margin:0">まだ戦績はありません。最初の作戦の結果が出ると、ここに載ります。</p>'}</section>`;
@@ -448,13 +448,11 @@ function renderSortie(box){
       <div class="field"><span class="lbl">装備<small>4つまで。持っている装備は無料</small></span><div class="choices two" id="sEq"></div></div>
       <div class="field"><label class="choice"><input type="checkbox" id="sPromote" ${me.rank==='大佐'||!canPromote?'disabled':''}><span><span class="t">昇進する（${esc(me.rank)}→${esc(RANKS[RANKS.indexOf(me.rank)+1]||'—')}、功績P ${RANK_COST[me.rank]??'—'}）</span><span class="d">${canPromote?'昇進すると能力値を合計2上げられます':'昇進できるのは、参加した回の次の回からです'}</span></span></label><div id="sUp"></div></div>
       <div class="field"><label for="sWing">僚艦（任意）<small>同じエリアに出撃すると心強い。お互いに指定し合うとさらに有利</small></label><select id="sWing"><option value="">指定しない</option>${roster.filter(r=>r.id!==me.id && r.state==='active').map(r=>`<option value="${r.id}">${esc(r.rank)} ${esc(r.name)}</option>`).join('')}</select></div>
-      <div class="field"><label for="sFa">フリーアクション（任意）<small>艦がどう動くかの宣言。300文字まで。状況に合っていると少し有利になり、紙面に載ることもあります</small></label><textarea id="sFa" maxlength="300"></textarea><div class="note" id="sFaCount" style="text-align:right;margin:2px 0 0"></div></div>
       <div class="cost" id="sCost"></div>
       <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button><div class="msg" id="sMsg" role="status"></div>
     </div></section>`;
 
   $('#sWing').value = state.wing ? String(state.wing) : '';
-  $('#sFa').value = state.fa;
   if (!canPromote){ state.promote = false; state.up = {}; }
   $('#sPromote').checked = state.promote;
 
@@ -479,7 +477,6 @@ function renderSortie(box){
     $('#sUp').innerHTML = state.promote ? `<div style="margin-top:8px">${STATS.map(([k,n])=>`<div class="stat"><b>${n}</b><span style="color:var(--sub);font-size:13px">${me.stats[k]} → ${me.stats[k]+(state.up[k]||0)}</span><div class="step"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}の上げ幅を減らす" ${!(state.up[k]>0)?'disabled':''}>−</button><output>+${state.up[k]||0}</output><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${upTotal>=2||me.stats[k]+(state.up[k]||0)>=20?'disabled':''}>＋</button></div></div>`).join('')}<div class="total"><span>上げた合計</span><b class="${upTotal===2?'ok':''}">${upTotal} / 2</b></div></div>` : '';
     const cost = calc(), left = me.merit - cost;
     $('#sCost').innerHTML = `<span>今回の支払い <b>${cost}</b> P</span><span>出撃後の功績P <b class="${left<0?'over':''}">${left}</b> P</span>`;
-    $('#sFaCount').textContent = `${$('#sFa').value.length} / 300`;
     bind();
   };
   const bind = () => {
@@ -489,7 +486,6 @@ function renderSortie(box){
     $('#sUp').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; state.up[k]=(state.up[k]||0)+(+b.dataset.d); if(!state.up[k]) delete state.up[k]; draw(); });
   };
   $('#sPromote').onchange = e => { state.promote = e.target.checked; if(!state.promote) state.up = {}; draw(); };
-  $('#sFa').oninput = () => { $('#sFaCount').textContent = `${$('#sFa').value.length} / 300`; };
   draw();
 
   $('#sBtn').onclick = async () => {
@@ -497,7 +493,7 @@ function renderSortie(box){
     if (!state.area){ msg.className='msg err'; msg.textContent='出撃エリアを選んでください。'; return; }
     if (!state.ship){ msg.className='msg err'; msg.textContent='艦艇を選んでください。'; return; }
     $('#sBtn').disabled = true; msg.textContent = '送信しています…';
-    const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: [...state.eq], p_wingman: $('#sWing').value ? Number($('#sWing').value) : null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: $('#sFa').value });
+    const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: [...state.eq], p_wingman: $('#sWing').value ? Number($('#sWing').value) : null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '' });
     if (error){ msg.className='msg err'; msg.textContent = error.message; $('#sBtn').disabled=false; return; }
     await loadAll();
     const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `出撃指示を受け付けました。今回の支払い ${data.cost}P、出撃後の功績P ${data.merit_left}P。締切までは何度でも出し直せます。`; }
