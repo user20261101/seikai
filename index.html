@@ -377,7 +377,7 @@ function renderReport(){
   const areas = rp.judge.areas || [], ent = rp.entries || [], byId = Object.fromEntries(ent.map(x=>[x.id,x]));
   const g0 = rp.judge.gauge_before, g1 = rp.judge.gauge_after;
   const lc = last.content || {}, aname = c => (lc.areas||[]).find(a=>a.code===c)?.name || '';
-  const row = x => `<tr class="${me&&x.id===me.id?'mine':''}"><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.ship)}</td><td><span class="out o-${OUT_CLS[x.outcome]||'sub'}">${esc(x.outcome)}${x.injured?'・負傷':''}</span></td><td class="num">${x.kills}</td><td class="num">+${x.merit}</td></tr>`;
+  const row = x => `<tr class="${me&&x.id===me.id?'mine':''}"><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.ship)}</td><td><span class="out o-${OUT_CLS[x.outcome]||'sub'}">${esc(x.outcome)}${x.outcome==='撃沈'?(x.injured?'・負傷して脱出':'・無傷で脱出'):''}</span></td><td class="num">${x.kills}</td><td class="num">+${x.merit}</td></tr>`;
   const mine = me && byId[me.id];
   return `<section class="report" style="margin-top:0"><div class="sh">前回の結果　第${last.no}話「${esc(last.title)}」</div>
     <div class="panel">
