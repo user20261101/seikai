@@ -266,6 +266,18 @@ dl.oname dd{margin:0;font-family:var(--f-head);font-weight:900;font-size:17px}
 .oinj{font-size:12px;color:var(--warn);margin-top:2px}
 .ochk.off{opacity:.45;cursor:not-allowed}
 #sUpHint.warn{color:var(--warn)}
+
+.lastcard{margin-top:14px;border:1px solid var(--rule);border-radius:8px;padding:10px 14px;background:var(--panel)}
+.lhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:6px}
+.lhead b{font-size:14px;letter-spacing:.1em;color:var(--glow)}
+.lhead span{font-size:12px;color:var(--sub)}
+.lhead a{margin-left:auto;font-size:12px}
+dl.lrow{margin:0;display:grid;gap:3px}
+dl.lrow div{display:grid;grid-template-columns:3.2em 1fr;gap:6px;font-size:13px;align-items:baseline}
+dl.lrow dt{color:var(--sub);font-size:12px}
+dl.lrow dd{margin:0}
+.lgauge{margin-top:6px;padding-top:6px;border-top:1px solid var(--rule);font-size:12px;color:var(--sub)}
+.lgauge b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -581,6 +593,27 @@ function renderRegister(box){
   };
 }
 
+
+/* ---------- your previous result, shown under the order card ---------- */
+function lastResultCard(){
+  const rp = last?.report; if (!rp?.judge) return '';
+  const mine = (rp.entries||[]).find(x=>x.id===me?.id);
+  const lc = last.content || {}, aname = c => (lc.areas||[]).find(a=>a.code===c)?.name || '';
+  const g0 = rp.judge.gauge_before, g1 = rp.judge.gauge_after;
+  const area = mine?.area ? (rp.judge.areas||[]).find(a=>a.code===mine.area) : null;
+  const body = !mine || mine.outcome==='未出撃' ? '<p class="note" style="margin:0">前回は出撃していません。</p>'
+    : `<dl class="lrow">
+        <div><dt>部隊</dt><dd>${esc(mine.area)} ${esc(aname(mine.area))}${area?` <span class="res r-${esc(area.result)}" style="margin:0 0 0 4px">${esc(area.result)}</span>`:''}</dd></div>
+        <div><dt>艦艇</dt><dd>${esc(mine.ship||'—')}${mine.stance?`<span class="note" style="margin:0">　方針 ${esc(mine.stance)}</span>`:''}</dd></div>
+        <div><dt>結果</dt><dd><span class="out o-${OUT_CLS[mine.outcome]||'sub'}">${esc(mine.outcome)}${mine.outcome==='撃沈'?(mine.injured?'・負傷して脱出':'・無傷で脱出'):''}</span>　撃沈 <b>${mine.kills}</b>　功績P <b class="o-good">+${mine.merit}</b></dd></div>
+      </dl>`;
+  return `<section class="lastcard" aria-label="前回のあなたの結果">
+    <div class="lhead"><b>前回の結果</b><span>第${last.no}話「${esc(last.title)}」</span><a href="#paper/${last.no}">紙面で読む</a></div>
+    ${body}
+    ${g0!=null?`<div class="lgauge">戦況 ${g0} → <b>${g1}</b>　${esc(rp.headline||'')}</div>`:''}
+  </section>`;
+}
+
 /* ---------- sortie (compact order card) ----------
    Modeled on the old postcard order form: one card, one screen. Everything you need to *read* is in the paper on the left;
    here you only pick: area / ship / equipment (4 slots) / stance / wingman / promotion, and see the merit ledger. */
@@ -622,7 +655,7 @@ function renderSortie(box){
     <div class="ledger" id="sCost" aria-live="polite"></div>
     <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button>
     <div class="msg" id="sMsg" role="status"></div>
-  </form>`;
+  </form>${lastResultCard()}`;
 
   $('#sPromote').checked = state.promote;
 
