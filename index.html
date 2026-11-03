@@ -600,12 +600,19 @@ function renderSortie(box){
   const statsAfter = () => { const s={...me.stats}; if(state.promote) for(const k in state.up) s[k]+=state.up[k]; return s; };
   const shipNg = s => { const r=s.requires||{}; if(r.rank && rankIdx() < RANKS.indexOf(r.rank)) return `${r.rank}以上`; if(r.stats){ const sa=statsAfter(); for(const k in r.stats) if((sa[k]||0) < r.stats[k]) return `${SNAME[k]}${r.stats[k]}以上`; } return ''; };
   const shipCost = s => me.ship_code===s.code ? (me.repair_due||0) : (s.free_from && me.ship_code===s.free_from ? 0 : s.cost);
-  const calc = () => {
+  // trade-in: switching ships returns half the old ship's listed price (rounded down), minus unpaid repairs; upgrades (改修) return nothing
+  const refund = () => {
+    const s = shipOf(state.ship); if (!s || !me.ship_code || s.code === me.ship_code) return 0;
+    if (s.free_from && me.ship_code === s.free_from) return 0;
+    const old = shipOf(me.ship_code); return old ? Math.max(0, Math.floor(old.cost / 2) - (me.repair_due || 0)) : 0;
+  };
+  const gross = () => {
     let cost = state.promote ? (RANK_COST[me.rank]||0) : 0;
     const s = shipOf(state.ship); if (s) cost += shipCost(s);
     for (const code of state.eq) if (code && !me.equipment.includes(code)) cost += eqOf(code)?.cost || 0;
     return cost;
   };
+  const calc = () => gross() - refund();
   const draw = () => {
     $('#sArea').innerHTML = c.areas.map(a=>`<button type="button" role="radio" aria-checked="${state.area===a.code}" class="segb d-${esc(a.danger)}" data-v="${a.code}" title="${esc(a.name)}"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></button>`).join('');
     const ar = c.areas.find(a=>a.code===state.area);
@@ -623,8 +630,8 @@ function renderSortie(box){
     $('#sStats').innerHTML = STATS.map(([k,n])=>{ const v = me.stats[k]+(state.up[k]||0);
       return `<div class="sc${state.up[k]?' raised':''}"><span class="sn">${n}</span><div class="sv"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${!on||!(state.up[k]>0)?'disabled':''}>−</button><b>${v}</b><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${!on||upTotal>=2||v>=20?'disabled':''}>＋</button></div></div>`; }).join('');
     $('#sUpHint').textContent = !canPromote ? '参加した回の次の回から昇進できます' : on ? `あと ${2-upTotal} 上げられます` : '昇進すると能力値を合計2上げられます';
-    const cost = calc(), left = me.merit - cost;
-    $('#sCost').innerHTML = `<span>所持 <b>${me.merit}</b></span><span>−</span><span>消費 <b>${cost}</b></span><span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
+    const g = gross(), rf = refund(), left = me.merit - g + rf;
+    $('#sCost').innerHTML = `<span>所持 <b>${me.merit}</b></span><span>−</span><span>消費 <b>${g}</b></span>${rf?`<span>＋</span><span title="${esc(shipOf(me.ship_code)?.name||'')}を下取り">下取り <b class="ok">${rf}</b></span>`:''}<span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
     bind();
   };
   const bind = () => {
@@ -649,7 +656,7 @@ function renderSortie(box){
     const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: eq, p_wingman: null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '', p_stance: state.stance });
     if (error){ msg.className='msg err'; msg.textContent = error.message; $('#sBtn').disabled=false; return; }
     await loadAll();
-    const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `受け付けました。消費 ${data.cost}P、残り ${data.merit_left}P。締切までは何度でも出し直せます。`; }
+    const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `受け付けました。${data.refund?`下取り ${data.refund}P を含めて`:''}差し引き ${data.cost}P、残り ${data.merit_left}P。締切までは何度でも出し直せます。`; }
   };
 }
 
