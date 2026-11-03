@@ -245,6 +245,14 @@ body.sheet-open{overflow:hidden}
 .ostats .sc.raised b{color:var(--good)}
 .opromo{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:2px 10px;margin-top:6px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
 .opromo .ochk{font-size:12.5px}
+
+.issues{display:flex;gap:6px;align-items:center;overflow-x:auto;margin:0 0 16px;padding-bottom:2px;scrollbar-width:none}
+.issues::-webkit-scrollbar{display:none}
+.issues .il{flex:none;font-size:12px;color:var(--sub);margin-right:4px}
+.issue{flex:none;display:flex;flex-direction:column;line-height:1.3;padding:5px 12px;border:1px solid var(--rule);border-radius:6px;color:var(--ink);text-decoration:none;font-weight:700;font-size:13px;background:var(--panel)}
+.issue span{font-weight:400;font-size:11px;color:var(--sub)}
+.issue[aria-current=page]{border-color:var(--glow);color:var(--glow);box-shadow:inset 0 0 0 1px var(--glow)}
+.tabs a:focus-visible{outline-offset:-3px}
 </style>
 </head>
 <body>
@@ -280,7 +288,7 @@ const whaleImg = n => /大型/.test(n)?IMG.whale_big:/小型/.test(n)?IMG.whale_
 const imgSrc = (v, fallback) => v && /^(https:|data:image\/|img\/[\w.-]+$)/.test(v) ? v : fallback;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let sb, session = null, ep = null, last = null, gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [];
+let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [];
 const AUTH_JA = m => /Invalid login credentials/i.test(m) ? 'メールアドレスかパスワードが違います。'
   : /already registered|already been registered/i.test(m) ? 'このメールアドレスは登録済みです。「ログイン」から入ってください。'
   : /Password should be at least/i.test(m) ? 'パスワードは6文字以上にしてください。'
@@ -349,9 +357,9 @@ async function loadAll(){
   ep = e;
   const [lr, er] = await Promise.all([
     sb.from('episodes').select('id,no,title,content,report').eq('status','done').order('no',{ascending:false}).limit(1).maybeSingle(),
-    sb.from('episodes').select('id,no').neq('status','draft')]);
+    sb.from('episodes').select('id,no,title,status,deadline,content,report').neq('status','draft').order('no')]);
   last = lr.data || null;
-  epNo = Object.fromEntries((er.data||[]).map(x=>[x.id,x.no]));
+  epsAll = er.data || []; epNo = Object.fromEntries(epsAll.map(x=>[x.id,x.no]));
   const r = await sb.from('characters').select('id,name,rank,state').order('id');
   roster = r.data || [];
   me = null; myOrder = null; myResults = [];
@@ -373,9 +381,8 @@ function epHead(){
   return ep ? `<div class="ephead"><div class="ep">第${ep.no}話　${esc(ep.title)}</div><div class="meta"><span>舞台 <b>${esc(ep.content.place||'')}</b></span><span>出撃締切 <b>${esc(dlText())}</b></span><span>登録艦長 <b>${roster.length}名</b></span></div></div>` : '';
 }
 
-function mapSvg(areas){
+function mapSvg(areas, c = ep.content){
   // Background art per episode (content.map_image), area pins laid over it in % so labels stay readable at any width
-  const c = ep.content;
   const src = c.map_image, srcS = c.map_image_s || c.map_image;
   const pos = c.map_pos || {A:[22,30],B:[83,36],C:[17,68],D:[83,70]};
   const pins = areas.filter(a=>pos[a.code]).map(a=>{ const [x,y]=pos[a.code];
@@ -387,9 +394,13 @@ function mapSvg(areas){
     ${pins}<figcaption>${esc(c.place||'')}</figcaption></figure>`;
 }
 
-function renderPaper(box, ref = false){
-  if (!ep){ box.innerHTML = '<p class="note">次の作戦の発表をお待ちください。</p>'; return; }
-  const c = ep.content;
+function issuesNav(cur){
+  if (epsAll.length < 2) return '';
+  return `<nav class="issues" aria-label="バックナンバー"><span class="il">バックナンバー</span>${epsAll.map(x=>`<a href="#paper${x.id===ep?.id?'':'/'+x.no}" class="issue" ${x.no===cur?'aria-current="page"':''}>第${x.no}話<span>${esc(x.title)}${x.id===ep?.id?'（最新）':''}</span></a>`).join('')}</nav>`;
+}
+function renderPaper(box, ref = false, E = ep){
+  if (!E){ box.innerHTML = '<p class="note">次の作戦の発表をお待ちください。</p>'; return; }
+  const c = E.content;
   const areas = c.areas.map(a=>`<article class="area"><h3><span class="code">${esc(a.code)}</span>${esc(a.name)}</h3>
      <div class="tags"><span class="tag d-${esc(a.danger)}">危険度 ${esc(a.danger)}</span><span class="tag">推奨能力 ${a.rec.map(k=>esc(SNAME[k])).join('・')}</span><span class="tag">有効な装備 ${a.eq.map(esc).join('・')}</span>${a.main?'<span class="tag">主戦場</span>':''}</div>
      <p>${esc(a.desc)}</p></article>`).join('');
@@ -401,7 +412,7 @@ function renderPaper(box, ref = false){
     <div class="sh">導入</div>
     <div class="panel"><p class="intro" style="margin:0">${esc(c.intro)}</p>
       ${c.briefing?`<div class="brief"><img class="face" src="${IMG.iruka}" alt="イルカ中尉"><div><b style="color:var(--ink)">イルカ中尉</b><br>${esc(c.briefing)}</div></div>`:''}</div>
-    <section data-sec="map"><div class="sh">戦略マップ</div>${mapSvg(c.areas)}</section>
+    <section data-sec="map"><div class="sh">戦略マップ</div>${mapSvg(c.areas, c)}</section>
     <section data-sec="areas"><div class="sh">出撃エリア</div><div class="areas">${areas}</div></section>
     <section data-sec="ships"><div class="sh">艦艇</div><div class="tbl"><table><thead><tr><th>艦</th><th class="num">攻撃</th><th class="num">防御</th><th class="num">機動</th><th class="num">功績P</th></tr></thead><tbody>${ships}</tbody></table></div></section>
     <section data-sec="eq"><div class="sh">装備（1隻4つまで）</div><div class="tbl"><table><thead><tr><th>装備</th><th class="num">種別</th><th class="num">功績P</th></tr></thead><tbody>${eqs}</tbody></table></div></section>
@@ -409,8 +420,13 @@ function renderPaper(box, ref = false){
   if (ref){
     const rpt = renderReport();
     box.innerHTML = current + (rpt ? `<details class="refprev" data-sec="prev"><summary>前回の結果を見る</summary>${rpt}</details>` : '');
+  } else if (E !== ep){
+    // back issue: the paper as it ran, then that episode's results
+    const meta = `<div class="ephead"><div class="ep">第${E.no}話　${esc(E.title)}</div><div class="meta"><span>舞台 <b>${esc(c.place||'')}</b></span><span>${E.status==='done'?'結果発表済み':'判定待ち'}</span></div></div>`;
+    const rpt = renderReport(E, 'この回の結果');
+    box.innerHTML = issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
-    box.innerHTML = epHead() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
+    box.innerHTML = issuesNav(E.no) + epHead() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
   }
 }
 
@@ -456,13 +472,13 @@ function renderSortieView(box){
 /* ---------- router ---------- */
 const VIEWS = ['home','paper','sortie','roster'];
 function route(){
-  let v = location.hash.slice(1); if (!VIEWS.includes(v)) v = 'home';
+  let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'home';
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (!me && v!=='paper' && v!=='roster'){ renderRegister(box); return; }
   document.body.classList.toggle('split-on', v==='sortie' && !!ep && !!me);
   if (v==='home') renderHome(box);
-  else if (v==='paper') renderPaper(box);
+  else if (v==='paper'){ const bk = arg && epsAll.find(x=>x.no===Number(arg)); renderPaper(box, false, bk && bk.id!==ep?.id ? bk : ep); }
   else if (v==='sortie'){ if (!ep){ box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; return; } renderSortieView(box); }
   else renderRoster(box);
   window.scrollTo(0,0);
@@ -497,14 +513,14 @@ function renderRoster(box){
 
 /* ---------- previous episode results (紙面の冒頭) ---------- */
 const OUT_CLS = {'帰還':'good','損傷':'glow','大破':'warn','撃沈':'bad','消息不明':'bad','未出撃':'sub'};
-function renderReport(){
-  const rp = last?.report; if (!rp || !rp.judge) return '';
+function renderReport(L = last, title = '前回の結果'){
+  const rp = L?.report; if (!rp || !rp.judge) return '';
   const areas = rp.judge.areas || [], ent = rp.entries || [], byId = Object.fromEntries(ent.map(x=>[x.id,x]));
   const g0 = rp.judge.gauge_before, g1 = rp.judge.gauge_after;
-  const lc = last.content || {}, aname = c => (lc.areas||[]).find(a=>a.code===c)?.name || '';
+  const lc = L.content || {}, aname = c => (lc.areas||[]).find(a=>a.code===c)?.name || '';
   const row = x => `<tr class="${me&&x.id===me.id?'mine':''}"><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.ship)}</td><td><span class="out o-${OUT_CLS[x.outcome]||'sub'}">${esc(x.outcome)}${x.outcome==='撃沈'?(x.injured?'・負傷して脱出':'・無傷で脱出'):''}</span></td><td class="num">${x.kills}</td><td class="num">+${x.merit}</td></tr>`;
   const mine = me && byId[me.id];
-  return `<section class="report" style="margin-top:0"><div class="sh">前回の結果　第${last.no}話「${esc(last.title)}」</div>
+  return `<section class="report" style="margin-top:0"><div class="sh">${title}　第${L.no}話「${esc(L.title)}」</div>
     <div class="panel">
       <h3 class="headline">${esc(rp.headline||'')}</h3>
       <p style="margin:8px 0 0">${esc(rp.summary||'')}</p>
