@@ -382,7 +382,7 @@ async function loadAll(){
   if (error){ $('#view').innerHTML = `<p class="msg err">紙面を読み込めませんでした（${esc(error.message)}）。</p>`; return; }
   ep = e;
   const [lr, er] = await Promise.all([
-    sb.from('episodes').select('id,no,title,content,report').eq('status','done').order('no',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('episodes').select('id,no,title,status,content,report').eq('status','done').order('no',{ascending:false}).limit(1).maybeSingle(),
     sb.from('episodes').select('id,no,title,status,deadline,content,report').neq('status','draft').order('no')]);
   last = lr.data || null;
   epsAll = er.data || []; epNo = Object.fromEntries(epsAll.map(x=>[x.id,x.no]));
@@ -450,7 +450,10 @@ function renderPaper(box, ref = false, E = ep){
     // back issue: the paper as it ran, then that episode's results
     const meta = `<div class="ephead"><div class="ep">第${E.no}話　${esc(E.title)}</div><div class="meta"><span>舞台 <b>${esc(c.place||'')}</b></span><span>${E.status==='done'?'結果発表済み':'判定待ち'}</span></div></div>`;
     const rpt = renderReport(E, 'この回の結果');
-    box.innerHTML = issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
+    // season over: the final issue opens with its result (and the ending) on top
+    box.innerHTML = !ep && E === last
+      ? issuesNav(E.no) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
+      : issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
     box.innerHTML = issuesNav(E.no) + epHead() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
   }
