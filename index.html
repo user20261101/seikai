@@ -186,7 +186,9 @@ body.sheet-open{overflow:hidden}
 @media(min-width:1100px){
   body.split-on .wrap{max-width:1280px}
   body.split-on .tabs{margin-inline:0}
-  .split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:28px;align-items:start}
+  .split{display:grid;grid-template-columns:minmax(0,2fr) minmax(360px,1fr);gap:24px;align-items:start}
+  body.split-on .ephead{margin-bottom:12px}
+  .formpane{position:sticky;top:48px}
   .refpane{display:block;position:sticky;top:48px;height:calc(100vh - 64px);border:1px solid var(--rule);border-radius:8px;background:var(--panel);padding:0 14px;overflow:hidden}
   .refpane .refbar{border-bottom:1px solid var(--rule);position:relative}
   .refpane .refscroll{height:calc(100% - 46px);overflow-y:auto;padding:14px 2px 40px;overscroll-behavior:contain}
@@ -194,6 +196,42 @@ body.sheet-open{overflow:hidden}
   .formpane{min-width:0}
   .refbtn{display:none}
 }
+
+/* compact order card (postcard-style) */
+.ocard{background:var(--panel2);border:1px solid var(--rule);border-radius:8px;padding:14px 16px}
+.ohead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+.oname{font-family:var(--f-head);font-weight:900;font-size:19px;line-height:1.3}
+.ohead .statline{font-size:12px}
+.ohead .pill{white-space:nowrap;flex:none}
+.oflag{margin-top:8px;font-size:12.5px;color:var(--good)}
+.orow{display:grid;grid-template-columns:3.6em 1fr;gap:8px;align-items:center;margin-top:10px}
+.orow.top{align-items:start}
+.olbl{font-weight:700;font-size:13px;color:var(--sub);line-height:1.3}
+.olbl small{display:block;font-weight:400;font-size:10.5px}
+.orow select{padding:7px 8px;font-size:13.5px}
+.ohint{font-size:12px;color:var(--sub);margin:4px 0 0 calc(3.6em + 8px);line-height:1.5}
+.ohint b{font-weight:700}
+.dl.d-低{color:var(--good)}.dl.d-中{color:var(--glow)}.dl.d-高{color:var(--warn)}.dl.d-最高{color:var(--bad)}
+.seg4,.seg3{display:grid;gap:6px}.seg4{grid-template-columns:repeat(4,1fr)}.seg3{grid-template-columns:repeat(3,1fr)}
+.segb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-height:38px;padding:4px 4px;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--ink);cursor:pointer;line-height:1.25;min-width:0}
+.segb b{font-family:var(--f-head);font-size:16px}
+.segb span{font-size:10.5px;color:var(--sub);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.segb[aria-checked=true]{border-color:var(--glow);box-shadow:inset 0 0 0 1px var(--glow);background:rgba(159,216,234,.08)}
+.segb.d-最高 b{color:var(--bad)}.segb.d-高 b{color:var(--warn)}.segb.d-中 b{color:var(--glow)}.segb.d-低 b{color:var(--good)}
+.seg3 .segb b{font-family:var(--f-body);font-size:14px}
+.eq4{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.eq4 select{padding:6px 6px;font-size:12.5px}
+.ochk{display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer}
+.ochk input{accent-color:var(--glow)}
+.up5{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:6px}
+.upc{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--sub)}
+.upc .step button{width:24px;height:24px}
+.upc .step output{width:1.6em;color:var(--ink)}
+.ledger{display:flex;justify-content:center;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:12px;padding:8px 10px;border:1px dashed var(--rule);border-radius:6px;font-size:13px;color:var(--sub)}
+.ledger b{color:var(--ink);font-size:17px;font-variant-numeric:tabular-nums}
+.ledger b.ok{color:var(--good)}.ledger b.over{color:var(--bad)}
+.ocard .btn.full{margin-top:10px;padding:10px}
+.ocard .msg{margin-top:6px;min-height:1.2em;font-size:13px}
 </style>
 </head>
 <body>
@@ -501,83 +539,101 @@ function renderRegister(box){
   };
 }
 
-/* ---------- sortie ---------- */
+/* ---------- sortie (compact order card) ----------
+   Modeled on the old postcard order form: one card, one screen. Everything you need to *read* is in the paper on the left;
+   here you only pick: area / ship / equipment (4 slots) / stance / wingman / promotion, and see the merit ledger. */
 function renderSortie(box){
   const c = ep.content;
   const shipOf = code => c.ships.find(s=>s.code===code);
-  const eqName = code => (c.equipment.find(q=>q.code===code)||{}).name || code;
-  const statLine = s => STATS.map(([k,n])=>`<span>${n} <b>${s[k]}</b></span>`).join('');
+  const eqOf = code => c.equipment.find(q=>q.code===code);
   const o = myOrder;
-  const state = { area: o?.area || '', ship: o?.ship_code || me.ship_code || '', eq: new Set(o?.equipment || me.equipment || []), promote: !!o?.promote, stance: o?.stance || '標準', up: {...(o?.stat_up||{})}, wing: o?.wingman_id || '', fa: o?.free_action || '' };
+  const initEq = (o?.equipment || me.equipment || []).slice(0,4);
+  const state = { area: o?.area || '', ship: o?.ship_code || me.ship_code || '', eq: [0,1,2,3].map(i=>initEq[i]||''),
+    promote: !!o?.promote, up: {...(o?.stat_up||{})}, stance: o?.stance || '標準', wing: o?.wingman_id ? String(o.wingman_id) : '' };
   const missing = me.state === 'missing';
-  const canPromote = ep.no > (me.joined_no ?? 1);  // first episode after joining: no promotion (server enforces too)
-
-  box.innerHTML = `<div class="sh">あなたの艦</div><div class="card">
-      <h2 style="font-size:22px">${esc(me.rank)}　${esc(me.name)}</h2>
-      <dl class="me" style="margin-top:8px"><dt>功績P</dt><dd><b>${me.merit}</b></dd><dt>乗艦</dt><dd>${me.ship_code?esc(shipOf(me.ship_code)?.name||me.ship_code):'なし'}${me.repair_due?`（修理費 ${me.repair_due}）`:''}</dd><dt>装備</dt><dd>${me.equipment.length?me.equipment.map(eqName).map(esc).join('、'):'なし'}</dd></dl>
-      <div class="statline" style="margin-top:6px">${statLine(me.stats)}</div>
-      ${o?`<div class="order-now">第${ep.no}話の出撃指示を受付済み：${esc(o.area)} ${esc(c.areas.find(a=>a.code===o.area)?.name||'')}／${esc(shipOf(o.ship_code)?.name||o.ship_code)}／方針 ${esc(o.stance||'標準')}。締切までは何度でも出し直せます。</div>`:''}
-    </div>
-    <section><div class="sh">出撃指示　第${ep.no}話</div><div class="card" id="sortie">
-      ${missing?'<p class="msg err">前回消息不明となったため、今回は出撃できません。次の話で帰還します。</p>':''}
-      ${me.injured?'<p class="msg" style="color:var(--warn);margin-top:0">負傷中：今回の戦闘では全能力値が1下がります（出撃しなくても次の処理で回復します）。</p>':''}
-      <div class="field"><span class="lbl">出撃エリア</span><div class="choices two" id="sArea"></div></div>
-      <div class="field"><span class="lbl">艦艇<small>今の艦に乗り続けるなら無料。乗り換えは功績Pが要ります</small></span><div class="choices two" id="sShip"></div></div>
-      <div class="field"><span class="lbl">装備<small>4つまで。持っている装備は無料</small></span><div class="choices two" id="sEq"></div></div>
-      <div class="field"><label class="choice"><input type="checkbox" id="sPromote" ${me.rank==='大佐'||!canPromote?'disabled':''}><span><span class="t">昇進する（${esc(me.rank)}→${esc(RANKS[RANKS.indexOf(me.rank)+1]||'—')}、功績P ${RANK_COST[me.rank]??'—'}）</span><span class="d">${canPromote?'昇進すると能力値を合計2上げられます':'昇進できるのは、参加した回の次の回からです'}</span></span></label><div id="sUp"></div></div>
-      <div class="field"><span class="lbl">作戦方針<small>戦い方の構え。戦果と被害のどちらを優先するか</small></span><div class="choices three" id="sStance"></div></div>
-      <div class="field"><label for="sWing">僚艦（任意）<small>同じエリアに出撃すると心強い。お互いに指定し合うとさらに有利</small></label><select id="sWing"><option value="">指定しない</option>${roster.filter(r=>r.id!==me.id && r.state==='active').map(r=>`<option value="${r.id}">${esc(r.rank)} ${esc(r.name)}</option>`).join('')}</select></div>
-      <div class="cost" id="sCost"></div>
-      <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button><div class="msg" id="sMsg" role="status"></div>
-    </div></section>`;
-
-  $('#sWing').value = state.wing ? String(state.wing) : '';
+  const canPromote = ep.no > (me.joined_no ?? 1);
   if (!canPromote){ state.promote = false; state.up = {}; }
+  const nextRank = RANKS[RANKS.indexOf(me.rank)+1];
+
+  box.innerHTML = `<form class="ocard" id="sortie" novalidate>
+    <div class="ohead">
+      <div><div class="oname">${esc(me.rank)}　${esc(me.name)}</div>
+        <div class="statline">${STATS.map(([k,n])=>`<span>${n} <b>${me.stats[k]}</b></span>`).join('')}</div></div>
+      ${me.injured?'<span class="pill ng" title="今回の戦闘では全能力値が1下がります">負傷中 能力−1</span>':''}
+    </div>
+    ${missing?'<p class="msg err" style="margin:6px 0 0">前回消息不明のため、今回は出撃できません。</p>':''}
+    ${o?`<div class="oflag">第${ep.no}話の出撃指示を受付済み。締切までは何度でも出し直せます。</div>`:''}
+
+    <div class="orow"><span class="olbl">部隊</span><div class="seg4" id="sArea" role="radiogroup" aria-label="出撃エリア"></div></div>
+    <div class="ohint" id="sAreaHint"></div>
+
+    <div class="orow"><label class="olbl" for="sShip">艦艇</label><select id="sShip"></select></div>
+    <div class="orow top"><span class="olbl">装備<small>4つまで</small></span><div class="eq4" id="sEq"></div></div>
+
+    <div class="orow"><span class="olbl">方針</span><div class="seg3" id="sStance" role="radiogroup" aria-label="作戦方針"></div></div>
+    <div class="orow"><label class="olbl" for="sWing">僚艦</label><select id="sWing"><option value="">指定しない</option>${roster.filter(r=>r.id!==me.id && r.state==='active').map(r=>`<option value="${r.id}">${esc(r.rank)} ${esc(r.name)}</option>`).join('')}</select></div>
+    <div class="orow top"><span class="olbl">昇進</span><div>
+      <label class="ochk"><input type="checkbox" id="sPromote" ${!canPromote||!nextRank?'disabled':''}> ${nextRank?`${esc(me.rank)}→${esc(nextRank)}（${RANK_COST[me.rank]}P・能力値＋2）`:'これ以上昇進できません'}</label>
+      ${!canPromote?'<div class="ohint" style="margin:2px 0 0">参加した回の次の回から昇進できます</div>':''}
+      <div id="sUp"></div></div></div>
+
+    <div class="ledger" id="sCost" aria-live="polite"></div>
+    <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button>
+    <div class="msg" id="sMsg" role="status"></div>
+  </form>`;
+
+  $('#sWing').value = state.wing;
   $('#sPromote').checked = state.promote;
 
   const rankIdx = () => RANKS.indexOf(me.rank) + (state.promote?1:0);
   const statsAfter = () => { const s={...me.stats}; if(state.promote) for(const k in state.up) s[k]+=state.up[k]; return s; };
-  const shipOk = s => { const r=s.requires||{}; if(r.rank && rankIdx() < RANKS.indexOf(r.rank)) return `${r.rank}以上`; if(r.stats){ const sa=statsAfter(); for(const k in r.stats) if((sa[k]||0) < r.stats[k]) return `${SNAME[k]}${r.stats[k]}以上`; } return ''; };
+  const shipNg = s => { const r=s.requires||{}; if(r.rank && rankIdx() < RANKS.indexOf(r.rank)) return `${r.rank}以上`; if(r.stats){ const sa=statsAfter(); for(const k in r.stats) if((sa[k]||0) < r.stats[k]) return `${SNAME[k]}${r.stats[k]}以上`; } return ''; };
+  const shipCost = s => me.ship_code===s.code ? (me.repair_due||0) : (s.free_from && me.ship_code===s.free_from ? 0 : s.cost);
   const calc = () => {
-    let cost = 0;
-    if (state.promote) cost += RANK_COST[me.rank] || 0;
-    const s = shipOf(state.ship);
-    if (s){ if (me.ship_code !== s.code){ if(!(s.free_from && me.ship_code===s.free_from)) cost += s.cost; } else cost += me.repair_due||0; }
-    for (const code of state.eq){ const q=c.equipment.find(x=>x.code===code); if(q && !me.equipment.includes(code)) cost += q.cost; }
+    let cost = state.promote ? (RANK_COST[me.rank]||0) : 0;
+    const s = shipOf(state.ship); if (s) cost += shipCost(s);
+    for (const code of state.eq) if (code && !me.equipment.includes(code)) cost += eqOf(code)?.cost || 0;
     return cost;
   };
   const draw = () => {
-    $('#sArea').innerHTML = c.areas.map(a=>`<label class="choice"><input type="radio" name="area" value="${a.code}" ${state.area===a.code?'checked':''}><span><span class="t">${a.code}　${esc(a.name)}</span><span class="d">危険度 ${esc(a.danger)}／推奨 ${a.rec.map(k=>SNAME[k]).join('・')}／有効 ${a.eq.join('・')}</span></span></label>`).join('');
-    $('#sShip').innerHTML = c.ships.map(s=>{ const ng=shipOk(s); const owned=me.ship_code===s.code; const free=s.free_from && me.ship_code===s.free_from;
-      return `<label class="choice"><input type="radio" name="ship" value="${s.code}" ${state.ship===s.code?'checked':''} ${ng?'disabled':''}><span>${IMG[s.code]?`<img class="shipimg" src="${IMG[s.code]}" alt="">`:''}<span class="t">${esc(s.name)}</span><span class="d">${esc(s.class)}　攻${s.atk} 防${s.def} 機${s.mob}${ng?`　条件：${ng}`:''}</span></span><span class="c">${owned?'乗艦中':free?'無料':s.cost+'P'}</span></label>`; }).join('');
-    $('#sStance').innerHTML = STANCES.map(([k,d])=>`<label class="choice"><input type="radio" name="stance" value="${k}" ${state.stance===k?'checked':''}><span><span class="t">${k}</span><span class="d">${d}</span></span></label>`).join('');
-    $('#sEq').innerHTML = c.equipment.map(q=>{ const on=state.eq.has(q.code); const owned=me.equipment.includes(q.code);
-      return `<label class="choice"><input type="checkbox" value="${q.code}" ${on?'checked':''} ${!on&&state.eq.size>=4?'disabled':''}><span><span class="t">${esc(q.name)}</span><span class="d">${esc(q.type)}</span></span><span class="c">${owned?'所持':q.cost+'P'}</span></label>`; }).join('');
+    $('#sArea').innerHTML = c.areas.map(a=>`<button type="button" role="radio" aria-checked="${state.area===a.code}" class="segb d-${esc(a.danger)}" data-v="${a.code}" title="${esc(a.name)}"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></button>`).join('');
+    const ar = c.areas.find(a=>a.code===state.area);
+    $('#sAreaHint').innerHTML = ar ? `危険度 <b class="dl d-${esc(ar.danger)}">${esc(ar.danger)}</b>　推奨 ${ar.rec.map(k=>SNAME[k]).join('・')}　有効 ${ar.eq.join('・')}` : '部隊を選ぶと、その宙域の要点がここに出ます';
+    $('#sShip').innerHTML = `<option value="">選んでください</option>` + c.ships.map(s=>{ const ng=shipNg(s); const owned=me.ship_code===s.code; const free=s.free_from && me.ship_code===s.free_from;
+      return `<option value="${s.code}" ${ng?'disabled':''}>${esc(s.name)}　攻${s.atk}防${s.def}機${s.mob}　${owned?(me.repair_due?`乗艦中・修理${me.repair_due}P`:'乗艦中'):free?'無料改修':s.cost+'P'}${ng?`（${ng}）`:''}</option>`; }).join('');
+    $('#sShip').value = state.ship && !shipNg(shipOf(state.ship)||{}) ? state.ship : (state.ship='', '');
+    $('#sEq').innerHTML = state.eq.map((v,i)=>`<select data-i="${i}" aria-label="装備${i+1}"><option value="">― なし ―</option>${c.equipment.map(q=>{ const taken = state.eq.includes(q.code) && v!==q.code;
+      return `<option value="${q.code}" ${taken?'disabled':''} ${v===q.code?'selected':''}>${esc(q.name)}［${esc(q.type)}］${me.equipment.includes(q.code)?'所持':q.cost+'P'}</option>`; }).join('')}</select>`).join('');
+    $('#sStance').innerHTML = STANCES.map(([k,d])=>`<button type="button" role="radio" aria-checked="${state.stance===k}" class="segb" data-v="${k}" title="${esc(d)}"><b>${k}</b></button>`).join('');
     const upTotal = Object.values(state.up).reduce((a,b)=>a+b,0);
-    $('#sUp').innerHTML = state.promote ? `<div style="margin-top:8px">${STATS.map(([k,n])=>`<div class="stat"><b>${n}</b><span style="color:var(--sub);font-size:13px">${me.stats[k]} → ${me.stats[k]+(state.up[k]||0)}</span><div class="step"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}の上げ幅を減らす" ${!(state.up[k]>0)?'disabled':''}>−</button><output>+${state.up[k]||0}</output><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${upTotal>=2||me.stats[k]+(state.up[k]||0)>=20?'disabled':''}>＋</button></div></div>`).join('')}<div class="total"><span>上げた合計</span><b class="${upTotal===2?'ok':''}">${upTotal} / 2</b></div></div>` : '';
+    $('#sUp').innerHTML = state.promote ? `<div class="up5">${STATS.map(([k,n])=>`<div class="upc"><span>${n}</span><div class="step"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${!(state.up[k]>0)?'disabled':''}>−</button><output>${me.stats[k]+(state.up[k]||0)}</output><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${upTotal>=2||me.stats[k]+(state.up[k]||0)>=20?'disabled':''}>＋</button></div></div>`).join('')}</div><div class="ohint">あと ${2-upTotal} 上げられます</div>` : '';
     const cost = calc(), left = me.merit - cost;
-    $('#sCost').innerHTML = `<span>今回の支払い <b>${cost}</b> P</span><span>出撃後の功績P <b class="${left<0?'over':''}">${left}</b> P</span>`;
+    $('#sCost').innerHTML = `<span>所持 <b>${me.merit}</b></span><span>−</span><span>消費 <b>${cost}</b></span><span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
     bind();
   };
   const bind = () => {
-    $('#sArea').querySelectorAll('input').forEach(i=>i.onchange=()=>{ state.area=i.value; draw(); });
-    $('#sShip').querySelectorAll('input').forEach(i=>i.onchange=()=>{ state.ship=i.value; draw(); });
-    $('#sStance').querySelectorAll('input').forEach(i=>i.onchange=()=>{ state.stance=i.value; draw(); });
-    $('#sEq').querySelectorAll('input').forEach(i=>i.onchange=()=>{ i.checked?state.eq.add(i.value):state.eq.delete(i.value); draw(); });
+    $('#sArea').querySelectorAll('button').forEach(b=>b.onclick=()=>{ state.area=b.dataset.v; draw(); });
+    $('#sStance').querySelectorAll('button').forEach(b=>b.onclick=()=>{ state.stance=b.dataset.v; draw(); });
+    $('#sShip').onchange = e => { state.ship = e.target.value; draw(); };
+    $('#sEq').querySelectorAll('select').forEach(s=>s.onchange=()=>{ state.eq[+s.dataset.i] = s.value; draw(); });
     $('#sUp').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; state.up[k]=(state.up[k]||0)+(+b.dataset.d); if(!state.up[k]) delete state.up[k]; draw(); });
   };
   $('#sPromote').onchange = e => { state.promote = e.target.checked; if(!state.promote) state.up = {}; draw(); };
   draw();
 
-  $('#sBtn').onclick = async () => {
-    const msg = $('#sMsg'); msg.className = 'msg';
-    if (!state.area){ msg.className='msg err'; msg.textContent='出撃エリアを選んでください。'; return; }
-    if (!state.ship){ msg.className='msg err'; msg.textContent='艦艇を選んでください。'; return; }
-    $('#sBtn').disabled = true; msg.textContent = '送信しています…';
-    const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: [...state.eq], p_wingman: $('#sWing').value ? Number($('#sWing').value) : null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '', p_stance: state.stance });
+  $('#sortie').onsubmit = async ev => {
+    ev.preventDefault();
+    const msg = $('#sMsg'); msg.className = 'msg err';
+    if (!state.area){ msg.textContent='部隊（出撃エリア）を選んでください。'; return; }
+    if (!state.ship){ msg.textContent='艦艇を選んでください。'; return; }
+    if (state.promote && Object.values(state.up).reduce((a,b)=>a+b,0) !== 2){ msg.textContent='昇進するときは能力値を合計2上げてください。'; return; }
+    if (calc() > me.merit){ msg.textContent='功績Pが足りません。艦や装備を見直してください。'; return; }
+    $('#sBtn').disabled = true; msg.className='msg'; msg.textContent = '送信しています…';
+    const eq = [...new Set(state.eq.filter(Boolean))];
+    const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: eq, p_wingman: $('#sWing').value ? Number($('#sWing').value) : null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '', p_stance: state.stance });
     if (error){ msg.className='msg err'; msg.textContent = error.message; $('#sBtn').disabled=false; return; }
     await loadAll();
-    const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `出撃指示を受け付けました。今回の支払い ${data.cost}P、出撃後の功績P ${data.merit_left}P。締切までは何度でも出し直せます。`; }
+    const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `受け付けました。消費 ${data.cost}P、残り ${data.merit_left}P。締切までは何度でも出し直せます。`; }
   };
 }
 
