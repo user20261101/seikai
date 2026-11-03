@@ -279,6 +279,7 @@ dl.lrow dd{margin:0}
 .lgauge{margin-top:6px;padding-top:6px;border-top:1px solid var(--rule);font-size:12px;color:var(--sub)}
 .lgauge b{color:var(--ink)}
 .ending{border-color:var(--warn);margin-bottom:6px}
+.capt{display:inline-block;margin-left:6px;font-size:12px;font-weight:700}
 </style>
 </head>
 <body>
@@ -541,13 +542,16 @@ function renderRoster(box){
 }
 
 /* ---------- previous episode results (紙面の冒頭) ---------- */
+// ship: 帰還 / 損傷 / 撃沈 (大破 only in older issues) ; captain: 帰還 / 負傷
+const outcomeHtml = x => x.outcome === '未出撃' ? '<span class="out o-sub">未出撃</span>'
+  : `<span class="out o-${OUT_CLS[x.outcome]||'sub'}">艦 ${esc(x.outcome)}</span><span class="capt ${x.injured?'o-bad':'o-good'}">艦長 ${x.injured?'負傷':'帰還'}</span>`;
 const OUT_CLS = {'帰還':'good','損傷':'glow','大破':'warn','撃沈':'bad','消息不明':'bad','未出撃':'sub'};
 function renderReport(L = last, title = '前回の結果'){
   const rp = L?.report; if (!rp || !rp.judge) return '';
   const areas = rp.judge.areas || [], ent = rp.entries || [], byId = Object.fromEntries(ent.map(x=>[x.id,x]));
   const g0 = rp.judge.gauge_before, g1 = rp.judge.gauge_after;
   const lc = L.content || {}, aname = c => (lc.areas||[]).find(a=>a.code===c)?.name || '';
-  const row = x => `<tr class="${me&&x.id===me.id?'mine':''}"><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.ship)}${x.stance?`<span class="note" style="margin:0;display:block">方針 ${esc(x.stance)}</span>`:''}</td><td><span class="out o-${OUT_CLS[x.outcome]||'sub'}">${esc(x.outcome)}${x.outcome==='撃沈'?(x.injured?'・負傷して脱出':'・無傷で脱出'):''}</span></td><td class="num">${x.kills}</td><td class="num">+${x.merit}</td></tr>`;
+  const row = x => `<tr class="${me&&x.id===me.id?'mine':''}"><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.ship)}${x.stance?`<span class="note" style="margin:0;display:block">方針 ${esc(x.stance)}</span>`:''}</td><td>${outcomeHtml(x)}</td><td class="num">${x.kills}</td><td class="num">+${x.merit}</td></tr>`;
   const mine = me && byId[me.id];
   const ending = rp.ending ? `<div class="panel ending"><div class="sh" style="margin:0 0 6px">${esc(rp.ending.label||'結末')}</div><h3 class="headline" style="font-size:24px">${esc(rp.ending.title)}</h3><p class="intro" style="margin:10px 0 0">${esc(rp.ending.text)}</p></div>` : '';
   return `<section class="report" style="margin-top:0">${ending}<div class="sh"${ending?' style="margin-top:22px"':''}>${title}　第${L.no}話「${esc(L.title)}」</div>
@@ -610,7 +614,7 @@ function lastResultCard(){
     : `<dl class="lrow">
         <div><dt>部隊</dt><dd>${esc(mine.area)} ${esc(aname(mine.area))}${area?` <span class="res r-${esc(area.result)}" style="margin:0 0 0 4px">${esc(area.result)}</span>`:''}</dd></div>
         <div><dt>艦艇</dt><dd>${esc(mine.ship||'—')}${mine.stance?`<span class="note" style="margin:0">　方針 ${esc(mine.stance)}</span>`:''}</dd></div>
-        <div><dt>結果</dt><dd><span class="out o-${OUT_CLS[mine.outcome]||'sub'}">${esc(mine.outcome)}${mine.outcome==='撃沈'?(mine.injured?'・負傷して脱出':'・無傷で脱出'):''}</span>　撃沈 <b>${mine.kills}</b>　功績P <b class="o-good">+${mine.merit}</b></dd></div>
+        <div><dt>結果</dt><dd>${outcomeHtml(mine)}　撃沈 <b>${mine.kills}</b>　功績P <b class="o-good">+${mine.merit}</b></dd></div>
       </dl>`;
   return `<section class="lastcard" aria-label="前回のあなたの結果">
     <div class="lhead"><b>前回の結果</b><span>第${last.no}話「${esc(last.title)}」</span><a href="#paper/${last.no}">紙面で読む</a></div>
