@@ -264,6 +264,8 @@ dl.oname dt::after{content:"："}
 dl.oname dd{margin:0;font-family:var(--f-head);font-weight:900;font-size:17px}
 .ocard .ohead{display:block}
 .oinj{font-size:12px;color:var(--warn);margin-top:2px}
+.ochk.off{opacity:.45;cursor:not-allowed}
+#sUpHint.warn{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -657,7 +659,15 @@ function renderSortie(box){
     $('#sStats').className = 'ostats' + (on ? ' on' : '');
     $('#sStats').innerHTML = STATS.map(([k,n])=>{ const v = me.stats[k]+(state.up[k]||0);
       return `<div class="sc${state.up[k]?' raised':''}"><span class="sn">${n}</span><div class="sv"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${!on||!(state.up[k]>0)?'disabled':''}>−</button><b>${v}</b><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${!on||upTotal>=2||v>=20?'disabled':''}>＋</button></div></div>`; }).join('');
-    $('#sUpHint').textContent = !canPromote ? '参加した回の次の回から昇進できます' : on ? `あと ${2-upTotal} 上げられます` : '昇進すると能力値を合計2上げられます';
+    // promotion is only offered while the merit left (after ship / equipment) still covers it
+    const rankCost = RANK_COST[me.rank] || 0, roomForPromo = me.merit - (calc() - (on ? rankCost : 0));
+    const short = !on && nextRank && canPromote && roomForPromo < rankCost;
+    $('#sPromote').disabled = !canPromote || !nextRank || short;
+    $('#sPromote').closest('.ochk').classList.toggle('off', $('#sPromote').disabled);
+    $('#sUpHint').textContent = !canPromote ? '参加した回の次の回から昇進できます'
+      : short ? `功績Pが足りません（あと ${rankCost - roomForPromo}P）`
+      : on ? `あと ${2-upTotal} 上げられます` : '昇進すると能力値を合計2上げられます';
+    $('#sUpHint').classList.toggle('warn', !!short);
     const g = gross(), rf = refund(), left = me.merit - g + rf;
     $('#sCost').innerHTML = `<span>所持 <b>${me.merit}</b></span><span>−</span><span>消費 <b>${g}</b></span>${rf?`<span>＋</span><span title="${esc(shipOf(me.ship_code)?.name||'')}を下取り">下取り <b class="ok">${rf}</b></span>`:''}<span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
     bind();
