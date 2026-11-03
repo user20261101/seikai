@@ -165,6 +165,35 @@ tr.mine td{background:rgba(159,216,234,.08)}
 .rank li .r{color:var(--sub);font-size:12.5px;margin-left:10px}
 .rank li.mine b{color:var(--glow)}
 .newtag{display:inline-block;font-size:11px;font-weight:700;color:#0d1015;background:var(--warn);border-radius:3px;padding:0 6px;vertical-align:2px}
+
+/* sortie split view */
+.refpane{display:none}
+.refbar{display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
+.refbar::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:99px;padding:4px 12px;font-size:13px;cursor:pointer}
+.chip:hover{border-color:var(--glow);color:var(--glow)}
+.refprev{margin-top:30px}.refprev>summary{font-size:14px}
+.refbtn{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;border:0;border-radius:99px;padding:12px 20px;font-weight:700;background:var(--warn);color:#0d1015;box-shadow:0 6px 20px rgba(0,0,0,.5);cursor:pointer}
+.sheet{position:fixed;inset:auto 0 0 0;margin:0;width:100%;max-width:100%;height:88vh;max-height:88vh;padding:0 16px;border:1px solid var(--rule);border-bottom:0;border-radius:14px 14px 0 0;background:var(--bg);color:var(--ink);display:none;flex-direction:column}
+.sheet[open]{display:flex;animation:sheetup .22s ease-out}
+.sheet::backdrop{background:rgba(0,0,0,.6)}
+@keyframes sheetup{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sheethead{flex:none;border-bottom:1px solid var(--rule)}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--rule);margin:8px auto 4px}
+.sheetrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sheet .refscroll{flex:1;overflow-y:auto;padding:14px 0 40px;overscroll-behavior:contain}
+body.sheet-open{overflow:hidden}
+@media(min-width:1100px){
+  body.split-on .wrap{max-width:1280px}
+  body.split-on .tabs{margin-inline:0}
+  .split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:28px;align-items:start}
+  .refpane{display:block;position:sticky;top:48px;height:calc(100vh - 64px);border:1px solid var(--rule);border-radius:8px;background:var(--panel);padding:0 14px;overflow:hidden}
+  .refpane .refbar{border-bottom:1px solid var(--rule);position:relative}
+  .refpane .refscroll{height:calc(100% - 46px);overflow-y:auto;padding:14px 2px 40px;overscroll-behavior:contain}
+  .refpane .refscroll .panel{background:var(--panel2)}
+  .formpane{min-width:0}
+  .refbtn{display:none}
+}
 </style>
 </head>
 <body>
@@ -307,7 +336,7 @@ function mapSvg(areas){
     ${pins}<figcaption>${esc(c.place||'')}</figcaption></figure>`;
 }
 
-function renderPaper(box){
+function renderPaper(box, ref = false){
   if (!ep){ box.innerHTML = '<p class="note">次の作戦の発表をお待ちください。</p>'; return; }
   const c = ep.content;
   const areas = c.areas.map(a=>`<article class="area"><h3><span class="code">${esc(a.code)}</span>${esc(a.name)}</h3>
@@ -316,17 +345,61 @@ function renderPaper(box){
   const ships = c.ships.map(s=>`<tr><td>${(s.img||IMG[s.code])?`<img class="shipimg" src="${imgSrc(s.img,IMG[s.code])}" alt="${esc(s.name)}">`:''}<b>${esc(s.name)}</b>${s.new?' <span class="newtag">新型</span>':''}<br><span class="note" style="margin:0">${esc(s.class)}　${esc(s.desc)}</span></td><td class="num">${esc(s.atk)}</td><td class="num">${esc(s.def)}</td><td class="num">${esc(s.mob)}</td><td class="num">${esc(s.cost)}</td></tr>`).join('');
   const eqs = c.equipment.map(q=>`<tr><td><b>${esc(q.name)}</b>${q.new?' <span class="newtag">新装備</span>':''}<br><span class="note" style="margin:0">${esc(q.desc)}</span></td><td class="num">${esc(q.type)}</td><td class="num">${esc(q.cost)}</td></tr>`).join('');
   const enemies = (c.enemies||[]).map(x=>`<div class="enemy"><img src="${imgSrc(x.img,whaleImg(x.name))}" alt="${esc(x.name)}"><div><b>${esc(x.name)}</b>${x.new?' <span class="newtag">新型</span>':''}<p style="margin:2px 0">${esc(x.desc)}</p><p class="hint" style="margin:0">${esc(x.hint||'')}</p></div></div>`).join('') + (c.unknown_teaser!==false?`<div class="enemy"><img src="${IMG.whale_unknown}" alt="未確認艦のシルエット"><div><b>未確認艦</b><p style="margin:2px 0">交戦宙域の奥で、正体不明の大型反応が確認されている。</p></div></div>`:'');
-  box.innerHTML = epHead() + renderReport() + `
-    ${last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':''}
+  const current = `
     <img class="hero" src="${imgSrc(c.hero,IMG.hero)}" alt="クジラ型艦と交戦する宙航軍の艦隊">
     <div class="sh">導入</div>
     <div class="panel"><p class="intro" style="margin:0">${esc(c.intro)}</p>
       ${c.briefing?`<div class="brief"><img class="face" src="${IMG.iruka}" alt="イルカ中尉"><div><b style="color:var(--ink)">イルカ中尉</b><br>${esc(c.briefing)}</div></div>`:''}</div>
-    <section><div class="sh">戦略マップ</div>${mapSvg(c.areas)}</section>
-    <section><div class="sh">出撃エリア</div><div class="areas">${areas}</div></section>
-    <section><div class="sh">艦艇</div><div class="tbl"><table><thead><tr><th>艦</th><th class="num">攻撃</th><th class="num">防御</th><th class="num">機動</th><th class="num">功績P</th></tr></thead><tbody>${ships}</tbody></table></div></section>
-    <section><div class="sh">装備（1隻4つまで）</div><div class="tbl"><table><thead><tr><th>装備</th><th class="num">種別</th><th class="num">功績P</th></tr></thead><tbody>${eqs}</tbody></table></div></section>
-    <section><div class="sh">敵艦情報</div>${enemies}</section>`;
+    <section data-sec="map"><div class="sh">戦略マップ</div>${mapSvg(c.areas)}</section>
+    <section data-sec="areas"><div class="sh">出撃エリア</div><div class="areas">${areas}</div></section>
+    <section data-sec="ships"><div class="sh">艦艇</div><div class="tbl"><table><thead><tr><th>艦</th><th class="num">攻撃</th><th class="num">防御</th><th class="num">機動</th><th class="num">功績P</th></tr></thead><tbody>${ships}</tbody></table></div></section>
+    <section data-sec="eq"><div class="sh">装備（1隻4つまで）</div><div class="tbl"><table><thead><tr><th>装備</th><th class="num">種別</th><th class="num">功績P</th></tr></thead><tbody>${eqs}</tbody></table></div></section>
+    <section data-sec="enemy"><div class="sh">敵艦情報</div>${enemies}</section>`;
+  if (ref){
+    const rpt = renderReport();
+    box.innerHTML = current + (rpt ? `<details class="refprev" data-sec="prev"><summary>前回の結果を見る</summary>${rpt}</details>` : '');
+  } else {
+    box.innerHTML = epHead() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
+  }
+}
+
+
+/* ---------- sortie view: paper beside the form ----------
+   Wide screens (>=1100px): two panes, paper left / form right, each scrolls on its own (the usual "reference + form" split).
+   Phones & narrow windows: the form fills the screen; a floating 「紙面を見る」 button opens the paper as a bottom sheet
+   with jump chips, and closing it returns to the form exactly where you were. */
+const WIDE = window.matchMedia('(min-width:1100px)');
+const REF_CHIPS = [['areas','エリア'],['ships','艦艇'],['eq','装備'],['enemy','敵艦'],['map','マップ'],['prev','前回']];
+function chipsHtml(){ return REF_CHIPS.map(([k,n])=>`<button type="button" class="chip" data-jump="${k}">${n}</button>`).join(''); }
+function bindChips(scope, pane){
+  scope.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{
+    const t = pane.querySelector(`[data-sec="${b.dataset.jump}"]`); if (!t) return;
+    if (t.tagName==='DETAILS') t.open = true;
+    pane.scrollTo({ top: t.offsetTop - pane.offsetTop - 8, behavior: 'smooth' });
+  });
+}
+function renderSortieView(box){
+  box.innerHTML = epHead() + `<div class="split">
+      <aside class="refpane" aria-label="紙面"><div class="refbar">${chipsHtml()}</div><div class="refscroll" id="refPane"></div></aside>
+      <div class="formpane"><div id="sbox"></div></div>
+    </div>
+    <button type="button" class="refbtn" id="refBtn" aria-haspopup="dialog">紙面を見る</button>
+    <dialog class="sheet" id="refSheet" aria-label="紙面">
+      <div class="sheethead"><div class="grab" aria-hidden="true"></div><div class="sheetrow"><b>第${ep.no}話の紙面</b><button type="button" class="btn ghost sm" id="refClose">閉じて入力に戻る</button></div><div class="refbar">${chipsHtml()}</div></div>
+      <div class="refscroll" id="refSheetBody"></div>
+    </dialog>`;
+  renderSortie($('#sbox'));
+  const pane = $('#refPane'), sheet = $('#refSheet'), body = $('#refSheetBody');
+  const fillPane = () => { if (WIDE.matches && !pane.childElementCount){ renderPaper(pane, true); bindChips(pane.parentElement, pane); } };
+  fillPane(); WIDE.onchange = () => { if ($('#refPane')) fillPane(); };
+  $('#refBtn').onclick = () => {
+    if (!body.childElementCount){ renderPaper(body, true); bindChips(sheet, body); }
+    sheet.showModal(); document.body.classList.add('sheet-open');
+  };
+  const close = () => { sheet.close(); };
+  $('#refClose').onclick = close;
+  sheet.addEventListener('close', () => document.body.classList.remove('sheet-open'));
+  sheet.addEventListener('click', e => { if (e.target === sheet) close(); });   // tap the dimmed area to close
 }
 
 /* ---------- router ---------- */
@@ -336,9 +409,10 @@ function route(){
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (!me && v!=='paper' && v!=='roster'){ renderRegister(box); return; }
+  document.body.classList.toggle('split-on', v==='sortie' && !!ep && !!me);
   if (v==='home') renderHome(box);
   else if (v==='paper') renderPaper(box);
-  else if (v==='sortie'){ if (!ep){ box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; return; } box.innerHTML = epHead() + '<div id="sbox"></div>'; renderSortie($('#sbox')); }
+  else if (v==='sortie'){ if (!ep){ box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; return; } renderSortieView(box); }
   else renderRoster(box);
   window.scrollTo(0,0);
 }
