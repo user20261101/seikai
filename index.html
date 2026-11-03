@@ -253,6 +253,17 @@ body.sheet-open{overflow:hidden}
 .issue span{font-weight:400;font-size:11px;color:var(--sub)}
 .issue[aria-current=page]{border-color:var(--glow);color:var(--glow);box-shadow:inset 0 0 0 1px var(--glow)}
 .tabs a:focus-visible{outline-offset:-3px}
+
+.otitle{margin:-14px -16px 12px;padding:9px 16px;background:var(--glow);color:#0d1015;border-radius:7px 7px 0 0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px}
+.otitle h2{font-size:17px;letter-spacing:.2em;margin:0}
+.otitle span{font-size:12px;font-weight:700;opacity:.8}
+dl.oname{display:flex;flex-wrap:wrap;gap:2px 20px;margin:0;font-family:var(--f-body);font-weight:400}
+dl.oname div{display:flex;align-items:baseline;gap:6px}
+dl.oname dt{font-size:12px;color:var(--sub)}
+dl.oname dt::after{content:"："}
+dl.oname dd{margin:0;font-family:var(--f-head);font-weight:900;font-size:17px}
+.ocard .ohead{display:block}
+.oinj{font-size:12px;color:var(--warn);margin-top:2px}
 </style>
 </head>
 <body>
@@ -584,10 +595,11 @@ function renderSortie(box){
   if (!canPromote){ state.promote = false; state.up = {}; }
   const nextRank = RANKS[RANKS.indexOf(me.rank)+1];
 
-  box.innerHTML = `<form class="ocard" id="sortie" novalidate>
+  box.innerHTML = `<form class="ocard" id="sortie" novalidate aria-labelledby="oTitle">
+    <div class="otitle"><h2 id="oTitle">出撃指示書</h2><span>第${ep.no}話「${esc(ep.title)}」　締切 ${esc(dlText())}</span></div>
     <div class="ohead">
-      <div class="oname">${esc(me.rank)}　${esc(me.name)}</div>
-      ${me.injured?'<span class="pill ng" title="今回の戦闘では全能力値が1下がります">負傷中 能力−1</span>':''}
+      <dl class="oname"><div><dt>名前</dt><dd>${esc(me.name)}</dd></div><div><dt>階級</dt><dd>${esc(me.rank)}</dd></div></dl>
+      ${me.injured?'<div class="oinj">負傷中：今回の戦闘では全能力値が1下がります</div>':''}
     </div>
     <div class="ostats" id="sStats"></div>
     <div class="opromo">
