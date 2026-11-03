@@ -232,6 +232,19 @@ body.sheet-open{overflow:hidden}
 .ledger b.ok{color:var(--good)}.ledger b.over{color:var(--bad)}
 .ocard .btn.full{margin-top:10px;padding:10px}
 .ocard .msg{margin-top:6px;min-height:1.2em;font-size:13px}
+
+.ostats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin-top:10px}
+.ostats .sc{display:flex;flex-direction:column;align-items:center;padding:4px 0;border:1px solid var(--rule);border-radius:6px;background:var(--bg);min-width:0}
+.ostats .sn{font-size:11px;color:var(--sub)}
+.ostats .sv{display:flex;align-items:center;gap:2px}
+.ostats .sv b{min-width:1.4em;text-align:center;font-size:16px;font-variant-numeric:tabular-nums}
+.ostats .sv button{width:20px;height:20px;padding:0;line-height:1;border:1px solid var(--rule);border-radius:4px;background:transparent;color:var(--ink);cursor:pointer;font-size:13px}
+.ostats:not(.on) .sv button{opacity:.15;cursor:default}
+.ostats.on .sv button:disabled{opacity:.3;cursor:default}
+.ostats.on .sc{border-color:rgba(159,216,234,.45)}
+.ostats .sc.raised b{color:var(--good)}
+.opromo{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:2px 10px;margin-top:6px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+.opromo .ochk{font-size:12.5px}
 </style>
 </head>
 <body>
@@ -557,9 +570,13 @@ function renderSortie(box){
 
   box.innerHTML = `<form class="ocard" id="sortie" novalidate>
     <div class="ohead">
-      <div><div class="oname">${esc(me.rank)}　${esc(me.name)}</div>
-        <div class="statline">${STATS.map(([k,n])=>`<span>${n} <b>${me.stats[k]}</b></span>`).join('')}</div></div>
+      <div class="oname">${esc(me.rank)}　${esc(me.name)}</div>
       ${me.injured?'<span class="pill ng" title="今回の戦闘では全能力値が1下がります">負傷中 能力−1</span>':''}
+    </div>
+    <div class="ostats" id="sStats"></div>
+    <div class="opromo">
+      <label class="ochk"><input type="checkbox" id="sPromote" ${!canPromote||!nextRank?'disabled':''}> ${nextRank?`昇進する　${esc(me.rank)}→${esc(nextRank)}（${RANK_COST[me.rank]}P）`:'これ以上昇進できません'}</label>
+      <span class="ohint" id="sUpHint" style="margin:0"></span>
     </div>
     ${missing?'<p class="msg err" style="margin:6px 0 0">前回消息不明のため、今回は出撃できません。</p>':''}
     ${o?`<div class="oflag">第${ep.no}話の出撃指示を受付済み。締切までは何度でも出し直せます。</div>`:''}
@@ -572,10 +589,6 @@ function renderSortie(box){
 
     <div class="orow"><span class="olbl">方針</span><div class="seg3" id="sStance" role="radiogroup" aria-label="作戦方針"></div></div>
     <div class="orow"><label class="olbl" for="sWing">僚艦</label><select id="sWing"><option value="">指定しない</option>${roster.filter(r=>r.id!==me.id && r.state==='active').map(r=>`<option value="${r.id}">${esc(r.rank)} ${esc(r.name)}</option>`).join('')}</select></div>
-    <div class="orow top"><span class="olbl">昇進</span><div>
-      <label class="ochk"><input type="checkbox" id="sPromote" ${!canPromote||!nextRank?'disabled':''}> ${nextRank?`${esc(me.rank)}→${esc(nextRank)}（${RANK_COST[me.rank]}P・能力値＋2）`:'これ以上昇進できません'}</label>
-      ${!canPromote?'<div class="ohint" style="margin:2px 0 0">参加した回の次の回から昇進できます</div>':''}
-      <div id="sUp"></div></div></div>
 
     <div class="ledger" id="sCost" aria-live="polite"></div>
     <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button>
@@ -606,7 +619,12 @@ function renderSortie(box){
       return `<option value="${q.code}" ${taken?'disabled':''} ${v===q.code?'selected':''}>${esc(q.name)}［${esc(q.type)}］${me.equipment.includes(q.code)?'所持':q.cost+'P'}</option>`; }).join('')}</select>`).join('');
     $('#sStance').innerHTML = STANCES.map(([k,d])=>`<button type="button" role="radio" aria-checked="${state.stance===k}" class="segb" data-v="${k}" title="${esc(d)}"><b>${k}</b></button>`).join('');
     const upTotal = Object.values(state.up).reduce((a,b)=>a+b,0);
-    $('#sUp').innerHTML = state.promote ? `<div class="up5">${STATS.map(([k,n])=>`<div class="upc"><span>${n}</span><div class="step"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${!(state.up[k]>0)?'disabled':''}>−</button><output>${me.stats[k]+(state.up[k]||0)}</output><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${upTotal>=2||me.stats[k]+(state.up[k]||0)>=20?'disabled':''}>＋</button></div></div>`).join('')}</div><div class="ohint">あと ${2-upTotal} 上げられます</div>` : '';
+    // stats are always shown; the +/- only light up while 「昇進する」 is checked
+    const on = state.promote;
+    $('#sStats').className = 'ostats' + (on ? ' on' : '');
+    $('#sStats').innerHTML = STATS.map(([k,n])=>{ const v = me.stats[k]+(state.up[k]||0);
+      return `<div class="sc${state.up[k]?' raised':''}"><span class="sn">${n}</span><div class="sv"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${!on||!(state.up[k]>0)?'disabled':''}>−</button><b>${v}</b><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${!on||upTotal>=2||v>=20?'disabled':''}>＋</button></div></div>`; }).join('');
+    $('#sUpHint').textContent = !canPromote ? '参加した回の次の回から昇進できます' : on ? `あと ${2-upTotal} 上げられます` : '昇進すると能力値を合計2上げられます';
     const cost = calc(), left = me.merit - cost;
     $('#sCost').innerHTML = `<span>所持 <b>${me.merit}</b></span><span>−</span><span>消費 <b>${cost}</b></span><span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
     bind();
@@ -616,7 +634,7 @@ function renderSortie(box){
     $('#sStance').querySelectorAll('button').forEach(b=>b.onclick=()=>{ state.stance=b.dataset.v; draw(); });
     $('#sShip').onchange = e => { state.ship = e.target.value; draw(); };
     $('#sEq').querySelectorAll('select').forEach(s=>s.onchange=()=>{ state.eq[+s.dataset.i] = s.value; draw(); });
-    $('#sUp').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; state.up[k]=(state.up[k]||0)+(+b.dataset.d); if(!state.up[k]) delete state.up[k]; draw(); });
+    $('#sStats').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; state.up[k]=(state.up[k]||0)+(+b.dataset.d); if(!state.up[k]) delete state.up[k]; draw(); });
   };
   $('#sPromote').onchange = e => { state.promote = e.target.checked; if(!state.promote) state.up = {}; draw(); };
   draw();
