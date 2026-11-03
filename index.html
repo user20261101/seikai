@@ -588,14 +588,12 @@ function renderSortie(box){
     <div class="orow top"><span class="olbl">装備<small>4つまで</small></span><div class="eq4" id="sEq"></div></div>
 
     <div class="orow"><span class="olbl">方針</span><div class="seg3" id="sStance" role="radiogroup" aria-label="作戦方針"></div></div>
-    <div class="orow"><label class="olbl" for="sWing">僚艦</label><select id="sWing"><option value="">指定しない</option>${roster.filter(r=>r.id!==me.id && r.state==='active').map(r=>`<option value="${r.id}">${esc(r.rank)} ${esc(r.name)}</option>`).join('')}</select></div>
 
     <div class="ledger" id="sCost" aria-live="polite"></div>
     <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button>
     <div class="msg" id="sMsg" role="status"></div>
   </form>`;
 
-  $('#sWing').value = state.wing;
   $('#sPromote').checked = state.promote;
 
   const rankIdx = () => RANKS.indexOf(me.rank) + (state.promote?1:0);
@@ -648,7 +646,7 @@ function renderSortie(box){
     if (calc() > me.merit){ msg.textContent='功績Pが足りません。艦や装備を見直してください。'; return; }
     $('#sBtn').disabled = true; msg.className='msg'; msg.textContent = '送信しています…';
     const eq = [...new Set(state.eq.filter(Boolean))];
-    const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: eq, p_wingman: $('#sWing').value ? Number($('#sWing').value) : null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '', p_stance: state.stance });
+    const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: eq, p_wingman: null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '', p_stance: state.stance });
     if (error){ msg.className='msg err'; msg.textContent = error.message; $('#sBtn').disabled=false; return; }
     await loadAll();
     const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `受け付けました。消費 ${data.cost}P、残り ${data.merit_left}P。締切までは何度でも出し直せます。`; }
