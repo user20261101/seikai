@@ -339,6 +339,34 @@ dl.lrow dd{margin:0}
 .optb.fit i{color:var(--good)}
 .optb[aria-pressed=true]{border-color:var(--glow);box-shadow:inset 0 0 0 1px var(--glow);background:rgba(159,216,234,.08)}
 .optb:disabled{opacity:.4;cursor:default}
+
+.postcard{position:relative;margin:0 0 22px;padding:16px 18px 12px;border-radius:6px;background:#f2ecdf;color:#26231e;box-shadow:0 1px 0 rgba(255,255,255,.04),0 6px 18px rgba(0,0,0,.35);border:1px solid #d9cfba}
+.postcard::before{content:"";position:absolute;inset:6px;border:1px dashed rgba(120,96,60,.35);border-radius:4px;pointer-events:none}
+.pc-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding-right:58px}
+.pc-from{font-family:var(--f-head);font-weight:700;font-size:13px;letter-spacing:.08em;color:#7a2e22}
+.pc-ep{font-size:12.5px;color:#6b6252}
+.pc-stamp{position:absolute;top:12px;right:14px;width:46px;height:46px;border:2px solid #b4392a;border-radius:50%;color:#b4392a;display:grid;place-items:center;font-weight:700;font-size:13px;transform:rotate(-12deg);opacity:.85}
+.pc-to{margin:10px 0 10px;font-size:15px;border-bottom:1px solid #d3c7ae;padding-bottom:6px}
+.pc-to b{font-size:19px;letter-spacing:.04em}
+.pc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 14px;margin:0 0 10px}
+.pc-stats div{min-width:0}
+.pc-stats dt{font-size:11px;color:#7d735f}
+.pc-stats dd{margin:0;font-size:14px;overflow-wrap:anywhere}
+.pc-big{font-size:20px;color:#1f6b3e}
+.pc-bad{color:#b4392a}
+.pc-res{display:inline-block;margin-left:6px;padding:0 6px;border:1px solid #9a8e74;border-radius:3px;font-size:11.5px}
+.pc-notes{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:5px}
+.pc-notes li{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:5px 9px;border-radius:4px;background:#e9e0cc;font-size:13px}
+.pc-notes li span:last-child{color:#4d4639}
+.pc-ic{font-weight:700;width:1em;text-align:center}
+.pc-n-honor .pc-ic{color:#a0700f}.pc-n-good .pc-ic{color:#1f6b3e}.pc-n-warn .pc-ic{color:#b4392a}
+.pc-n-special,.pc-n-double_promotion,.pc-n-ship_grant{background:#f6d9cf}
+.pc-n-special .pc-ic,.pc-n-double_promotion .pc-ic,.pc-n-ship_grant .pc-ic{color:#b4392a}
+.pc-body{margin:4px 0 8px;font-size:15px;line-height:1.9;font-family:var(--f-head)}
+.pc-sign{text-align:right;font-size:13px;color:#4d4639}
+.pc-foot{margin-top:8px;padding-top:6px;border-top:1px solid #d3c7ae;font-size:11.5px;color:#7d735f;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px}
+.pc-foot a{color:#7a2e22}
+@media (max-width:520px){.pc-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.postcard{padding:14px 14px 10px}}
 </style>
 </head>
 <body>
@@ -374,7 +402,7 @@ const whaleImg = n => /大型/.test(n)?IMG.whale_big:/小型/.test(n)?IMG.whale_
 const imgSrc = (v, fallback) => v && /^(https:|data:image\/|img\/[\w.-]+$)/.test(v) ? v : fallback;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [];
+let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [], lastOrder = null, myLetter = null;
 const AUTH_JA = m => /Invalid login credentials/i.test(m) ? 'メールアドレスかパスワードが違います。'
   : /already registered|already been registered/i.test(m) ? 'このメールアドレスは登録済みです。「ログイン」から入ってください。'
   : /Password should be at least/i.test(m) ? 'パスワードは6文字以上にしてください。'
@@ -458,13 +486,19 @@ async function loadAll(){
   epsAll = er.data || []; epNo = Object.fromEntries(epsAll.map(x=>[x.id,x.no]));
   const r = await sb.from('characters').select('id,name,rank,state').eq('season_id', SEASON).order('id');
   roster = r.data || [];
-  me = null; myOrder = null; myResults = [];
+  me = null; myOrder = null; myResults = []; lastOrder = null; myLetter = null;
   const m = await sb.from('characters').select('*').eq('season_id', SEASON).eq('user_id', session.user.id).maybeSingle();
   me = m.data;
   if (me){
     if (ep){ const o = await sb.from('orders').select('*').eq('episode_id', ep.id).eq('character_id', me.id).maybeSingle(); myOrder = o.data; }
     const rs = await sb.from('results').select('episode_id,area,ship_code,outcome,merit_gained,kills,highlight').eq('character_id', me.id).order('episode_id',{ascending:false});
     myResults = rs.data || [];
+    if (last){
+      const [lo, lt] = await Promise.all([
+        sb.from('orders').select('area,ship_code,equipment,stance,promote').eq('episode_id', last.id).eq('character_id', me.id).maybeSingle(),
+        sb.from('letters').select('body,notices').eq('episode_id', last.id).eq('character_id', me.id).maybeSingle()]);
+      lastOrder = lo.data || null; myLetter = lt.data || null;
+    }
   }
   if (!loadAll.adminChecked){ const ia = await sb.rpc('is_admin'); isAdmin = !!ia.data; loadAll.adminChecked = true;
     if (isAdmin && !document.querySelector('#tabs a[data-v=admin]')){ const t = document.createElement('a'); t.href = '#admin'; t.dataset.v = 'admin'; t.textContent = '編集部'; $('#tabs').appendChild(t); $('#tabs').classList.add('six'); } }
@@ -527,7 +561,7 @@ function renderPaper(box, ref = false, E = ep){
       ? issuesNav(E.no) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
       : issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
-    box.innerHTML = issuesNav(E.no) + epHead() + todoStrip() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
+    box.innerHTML = letterCard() + issuesNav(E.no) + epHead() + todoStrip() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
   }
 }
 
@@ -864,6 +898,71 @@ function todoStrip(){
   if (!o) return `<div class="todo-strip warn"><div><b>第${ep.no}話の出撃指示がまだです</b><span>締切 ${dl}　紙面を読んで、出撃する宙域を決めましょう</span></div><a class="btn" href="#sortie">出撃指示を出す</a></div>`;
   const a = ep.content.areas.find(x=>x.code===o.area), s = ep.content.ships.find(x=>x.code===o.ship_code);
   return `<div class="todo-strip ok"><div><b>第${ep.no}話の出撃指示は提出済みです</b><span>${esc(o.area)} ${esc(a?.name||'')}／${esc(s?.name||o.ship_code)}／方針 ${esc(o.stance||'標準')}　締切 ${dl} までは出し直せます</span></div><a class="btn ghost" href="#sortie">見直す</a></div>`;
+}
+
+
+/* ---------- 返信ハガキ：自分だけに届く前回の結果 ----------
+   Only built for the signed-in captain from their own order (owner-only) and result.
+   Editor-written text and special notices come from the private `letters` table (RLS: owner only). */
+function autoLetter(mine, A, lc, order){
+  const shipObj = (lc.ships||[]).find(s=>s.name===mine.ship || s.code===order?.ship_code);
+  const opts = shipObj?.options || lc.equipment || [];
+  const eqs = (order?.equipment||[]).map(code=>opts.find(q=>q.code===code)).filter(Boolean);
+  const fit = eqs.filter(q=>(A?.eq||[]).includes(q.type)), miss = eqs.filter(q=>!(A?.eq||[]).includes(q.type));
+  const aname = A ? `${A.code} ${A.name}` : mine.area;
+  const s = [];
+  s.push(`第${last.no}話、貴官の${mine.ship}は${aname}に出撃した。`);
+  if (fit.length) s.push(`${fit.map(q=>q.name).join('と')}が宙域の状況によく合い、戦いを支えた。`);
+  else if (eqs.length) s.push(`${eqs.map(q=>q.name).join('と')}を積んでいたが、この宙域で求められる装備（${(A?.eq||[]).join('・')}）とは噛み合わなかった。`);
+  const pre = mine.stance==='積極' ? '前に出て' : mine.stance==='慎重' ? '距離を取りつつ' : '';
+  s.push(mine.kills>=3 ? `${pre}敵艦${mine.kills}隻を撃沈する目覚ましい戦果を挙げた。`
+    : mine.kills>0 ? `${pre}敵艦${mine.kills}隻を撃沈した。`
+    : mine.outcome==='撃沈' ? '撃沈には至らなかった。' : '撃沈には至らなかったが、最後まで持ち場を守り抜いた。');
+  if (mine.outcome==='撃沈') s.push(mine.injured ? '艦は集中砲火を受けて撃沈され、貴官は負傷して脱出した。' : '艦は撃沈されたが、貴官は無傷で脱出し、救助されている。');
+  else s.push('艦は無事に帰還した。');
+  if (A?.result) s.push(`${A.main?'主戦場となった':''}${A.name}の戦いは「${A.result}」に終わった。`);
+  return s.join('');
+}
+function letterCard(){
+  if (!me || !last?.report?.judge) return '';
+  const rp = last.report, lc = last.content || {};
+  const mine = (rp.entries||[]).find(x=>x.id===me.id);
+  if (!mine && !myLetter) return '';
+  const A = mine ? (rp.judge.areas||[]).map(a=>({...a, ...((lc.areas||[]).find(x=>x.code===a.code)||{})})).find(a=>a.code===mine.area) : null;
+  const sortied = mine && mine.outcome !== '未出撃';
+  const pos = sortied ? (rp.ranking||[]).indexOf(me.id) + 1 : 0;
+  const mvp = sortied && rp.ranking?.[0] === me.id;
+  // notices: automatic ones first, then whatever the editor sent (二階級特進、特別艦の支給 など)
+  const N = [];
+  if (mvp) N.push({kind:'honor', title:'最活躍士官', text:'今回もっとも活躍した士官として紙面で紹介されています。'});
+  else if (pos) N.push({kind:'honor', title:`活躍ランキング ${pos}位`, text:'紙面のランキングに名前が載っています。'});
+  for (const n of (myLetter?.notices||[])) N.push(n);
+  if (sortied && mine.outcome==='撃沈') N.push({kind:'warn', title:'艦を失いました', text:'次の出撃では艦を選び直してください。'});
+  if (me.injured) N.push({kind:'warn', title:'負傷中', text:'次の戦闘だけ、全能力値が1下がります。'});
+  const next = RANKS[RANKS.indexOf(me.rank)+1], cost = RANK_COST[me.rank];
+  if (ep && next && cost && me.merit >= cost && (me.joined_no||0) < ep.no) N.push({kind:'good', title:'昇進できます', text:`${me.rank}→${next}（${cost}P）。出撃指示書で選べます。`});
+  const closing = mvp ? '司令部は貴官の奮戦を高く評価している。' : me.injured ? 'まずは傷を癒やし、次の作戦に備えられたい。'
+    : sortied && mine.outcome==='撃沈' ? '新たな艦を手配し、次の作戦に備えられたい。' : sortied ? '次の作戦でも貴官の活躍を期待する。' : '';
+  const body = myLetter?.body || (sortied ? autoLetter(mine, A, lc, lastOrder) + closing
+    : `第${last.no}話では、貴官からの出撃指示は届かなかった。次の作戦では貴官の出撃を待っている。`);
+  const stat = sortied ? `<dl class="pc-stats">
+      <div><dt>部隊</dt><dd>${esc(mine.area)} ${esc(A?.name||'')}${A?.result?`<span class="pc-res">${esc(A.result)}</span>`:''}</dd></div>
+      <div><dt>艦</dt><dd>${esc(mine.ship||'—')}　${mine.outcome==='撃沈'?'<b class="pc-bad">撃沈</b>':'帰還'}</dd></div>
+      <div><dt>艦長</dt><dd>${mine.injured?'<b class="pc-bad">負傷</b>':'無事'}</dd></div>
+      <div><dt>撃沈</dt><dd><b>${mine.kills}</b> 隻</dd></div>
+      <div><dt>獲得功績P</dt><dd><b class="pc-big">+${mine.merit}</b></dd></div>
+      <div><dt>現在の功績P</dt><dd><b>${me.merit}</b></dd></div>
+    </dl>` : '';
+  const ICON = {honor:'★', good:'▲', warn:'！', special:'◆', double_promotion:'◆', ship_grant:'◆'};
+  const notes = N.length ? `<ul class="pc-notes">${N.map(n=>`<li class="pc-n-${esc(n.kind||'special')}"><span class="pc-ic" aria-hidden="true">${ICON[n.kind]||'◆'}</span><b>${esc(n.title||'特別通達')}</b>${n.text?`<span>${esc(n.text)}</span>`:''}</li>`).join('')}</ul>` : '';
+  return `<section class="postcard" aria-label="あなただけの戦闘結果通知">
+    <div class="pc-head"><span class="pc-from">航宙軍司令部　戦闘結果通知</span><span class="pc-ep">第${last.no}話「${esc(last.title)}」</span><span class="pc-stamp" aria-hidden="true">親展</span></div>
+    <div class="pc-to">${esc(me.rank)}　<b>${esc(me.name)}</b>　殿</div>
+    ${stat}${notes}
+    <p class="pc-body">${esc(body)}</p>
+    <div class="pc-sign">航宙軍司令部　イルカ中尉</div>
+    <div class="pc-foot">この欄はあなたにしか表示されません　<a href="#paper/${last.no}">第${last.no}話の紙面を読む</a></div>
+  </section>`;
 }
 
 /* ---------- paper (紙面) ---------- */
