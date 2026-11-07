@@ -308,6 +308,19 @@ dl.lrow dd{margin:0}
 .champ{border-color:var(--warn)}
 .champname{font-family:var(--f-head);font-weight:900;font-size:22px}
 .tabs a{font-size:13px;white-space:nowrap}
+
+.tabs.six{grid-template-columns:repeat(6,1fr)}
+.admin .aslot{margin-top:24px}
+.arow{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.athumb{width:220px;max-width:100%;height:auto;border:1px solid var(--rule);border-radius:6px;background:#fff;display:block}
+.athumb.none{display:grid;place-items:center;height:120px;background:var(--panel);color:var(--sub);font-size:13px}
+.agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.acard{border:1px solid var(--rule);border-radius:8px;padding:10px;background:var(--panel)}
+.acard .athumb{width:100%;height:110px;object-fit:contain;margin:6px 0}
+.drop{display:grid;place-items:center;min-height:64px;margin-top:6px;border:2px dashed var(--rule);border-radius:8px;color:var(--sub);font-size:13px;text-align:center;cursor:pointer;padding:8px}
+.drop:hover,.drop.over{border-color:var(--glow);color:var(--glow);background:rgba(159,216,234,.06)}
+.mdot{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:2px solid #fff;background:var(--warn);box-shadow:0 0 0 2px #000;cursor:grab;touch-action:none;z-index:3;padding:0}
+#amap .map{touch-action:none}
 </style>
 </head>
 <body>
@@ -343,7 +356,7 @@ const whaleImg = n => /大型/.test(n)?IMG.whale_big:/小型/.test(n)?IMG.whale_
 const imgSrc = (v, fallback) => v && /^(https:|data:image\/|img\/[\w.-]+$)/.test(v) ? v : fallback;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [];
+let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [];
 const AUTH_JA = m => /Invalid login credentials/i.test(m) ? 'メールアドレスかパスワードが違います。'
   : /already registered|already been registered/i.test(m) ? 'このメールアドレスは登録済みです。「ログイン」から入ってください。'
   : /Password should be at least/i.test(m) ? 'パスワードは6文字以上にしてください。'
@@ -407,25 +420,36 @@ async function enterApp(){
   await loadAll();
 }
 
+// the season shown: the active one, else the most recent
+async function ensureSeason(){
+  if (SEASON) return SEASON;
+  const a = await sb.from('seasons').select('id').eq('status','active').order('id',{ascending:false}).limit(1).maybeSingle();
+  if (a.data) return (SEASON = a.data.id);
+  const b = await sb.from('seasons').select('id').order('id',{ascending:false}).limit(1).maybeSingle();
+  return (SEASON = b.data?.id ?? null);
+}
 async function loadAll(){
-  const { data: e, error } = await sb.from('episodes').select('id,no,title,status,deadline,content').eq('status','open').order('no',{ascending:false}).limit(1).maybeSingle();
+  await ensureSeason();
+  const { data: e, error } = await sb.from('episodes').select('id,no,title,status,deadline,content').eq('season_id', SEASON).eq('status','open').order('no',{ascending:false}).limit(1).maybeSingle();
   if (error){ $('#view').innerHTML = `<p class="msg err">紙面を読み込めませんでした（${esc(error.message)}）。</p>`; return; }
   ep = e;
   const [lr, er] = await Promise.all([
-    sb.from('episodes').select('id,no,title,status,content,report').eq('status','done').order('no',{ascending:false}).limit(1).maybeSingle(),
-    sb.from('episodes').select('id,no,title,status,deadline,content,report').neq('status','draft').order('no')]);
+    sb.from('episodes').select('id,no,title,status,content,report').eq('season_id', SEASON).eq('status','done').order('no',{ascending:false}).limit(1).maybeSingle(),
+    sb.from('episodes').select('id,no,title,status,deadline,content,report').eq('season_id', SEASON).neq('status','draft').order('no')]);
   last = lr.data || null;
   epsAll = er.data || []; epNo = Object.fromEntries(epsAll.map(x=>[x.id,x.no]));
-  const r = await sb.from('characters').select('id,name,rank,state').order('id');
+  const r = await sb.from('characters').select('id,name,rank,state').eq('season_id', SEASON).order('id');
   roster = r.data || [];
   me = null; myOrder = null; myResults = [];
-  const m = await sb.from('characters').select('*').eq('user_id', session.user.id).maybeSingle();
+  const m = await sb.from('characters').select('*').eq('season_id', SEASON).eq('user_id', session.user.id).maybeSingle();
   me = m.data;
   if (me){
     if (ep){ const o = await sb.from('orders').select('*').eq('episode_id', ep.id).eq('character_id', me.id).maybeSingle(); myOrder = o.data; }
     const rs = await sb.from('results').select('episode_id,area,ship_code,outcome,merit_gained,kills,highlight').eq('character_id', me.id).order('episode_id',{ascending:false});
     myResults = rs.data || [];
   }
+  if (!loadAll.adminChecked){ const ia = await sb.rpc('is_admin'); isAdmin = !!ia.data; loadAll.adminChecked = true;
+    if (isAdmin && !document.querySelector('#tabs a[data-v=admin]')){ const t = document.createElement('a'); t.href = '#admin'; t.dataset.v = 'admin'; t.textContent = '編集部'; $('#tabs').appendChild(t); $('#tabs').classList.add('six'); } }
   renderWho(); route();
 }
 
@@ -442,7 +466,7 @@ function mapSvg(areas, c = ep.content){
   const src = c.map_image, srcS = c.map_image_s || c.map_image;
   const pos = c.map_pos || {A:[22,30],B:[83,36],C:[17,68],D:[83,70]};
   const pins = areas.filter(a=>pos[a.code]).map(a=>{ const [x,y]=pos[a.code];
-    const side = x < 50 ? `left:${Math.max(1.5, x-12)}%` : `right:${Math.max(1.5, 100-x-12)}%`;
+    const side = pinSide(x);
     return `<div class="pin d-${esc(a.danger)}" style="${side};top:${y}%"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></div>`; }).join('');
   return `<figure class="map" role="img" aria-label="${esc(c.place)}の戦略マップ。${areas.map(a=>a.code+' '+a.name).join('、')}">
     ${src ? `<img src="${esc(src)}" srcset="${esc(srcS)} 800w, ${esc(src)} 1600w" sizes="(max-width:760px) 100vw, 760px" alt="" width="1600" height="899" loading="lazy">`
@@ -624,13 +648,118 @@ function renderRanking(box, sel){
     </section>`;
 }
 
+/* ---------- 編集部 (editor only): drop images onto an episode, place the map pins ---------- */
+const pinSide = (x) => x < 50 ? `left:${Math.max(1.5, x-12)}%` : `right:${Math.max(1.5, 100-x-12)}%`;
+let adminEps = [], adminSel = null;
+const SLOT_SIZE = { hero:[1200,900], map:[1600,1000], ship:[640,400], enemy:[640,400] };
+
+// shrink to fit, trim plain margins on cut-outs (ships / enemies), encode as webp
+async function prepImage(file, slot){
+  const bmp = await createImageBitmap(file);
+  let sx = 0, sy = 0, sw = bmp.width, sh = bmp.height;
+  if (slot === 'ship' || slot === 'enemy'){
+    const cv = new OffscreenCanvas(bmp.width, bmp.height), cx = cv.getContext('2d'); cx.drawImage(bmp, 0, 0);
+    const d = cx.getImageData(0, 0, bmp.width, bmp.height).data, W = bmp.width, H = bmp.height;
+    const bg = [d[0], d[1], d[2]], far = i => Math.abs(d[i]-bg[0]) + Math.abs(d[i+1]-bg[1]) + Math.abs(d[i+2]-bg[2]) > 40;
+    let x0 = W, y0 = H, x1 = 0, y1 = 0;
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) if (far((y*W + x)*4)){ if (x<x0)x0=x; if (x>x1)x1=x; if (y<y0)y0=y; if (y>y1)y1=y; }
+    if (x1 > x0 && y1 > y0){ const pad = Math.round(Math.max(W,H)*0.02); sx = Math.max(0,x0-pad); sy = Math.max(0,y0-pad); sw = Math.min(W,x1+pad)-sx; sh = Math.min(H,y1+pad)-sy; }
+  }
+  const [mw, mh] = SLOT_SIZE[slot], k = Math.min(1, mw/sw, mh/sh);
+  const out = document.createElement('canvas'); out.width = Math.round(sw*k); out.height = Math.round(sh*k);
+  const ox = out.getContext('2d');
+  if (slot === 'ship' || slot === 'enemy'){ ox.fillStyle = '#fff'; ox.fillRect(0,0,out.width,out.height); }
+  ox.drawImage(bmp, sx, sy, sw, sh, 0, 0, out.width, out.height);
+  return await new Promise(res => out.toBlob(res, 'image/webp', 0.8));
+}
+
+async function uploadSlot(E, slot, key, file, msgEl){
+  try{
+    msgEl.className = 'msg'; msgEl.textContent = '画像を整えています…';
+    const blob = await prepImage(file, slot);
+    msgEl.textContent = 'アップロードしています…';
+    const safe = slot === 'enemy' ? 'e' + (E.content.enemies||[]).findIndex(x=>x.name===key) : (key || slot).replace(/[^a-z0-9_]/gi,'');
+    const path = `s${SEASON}/ep${E.no}/${slot}-${safe}-${Date.now()}.webp`;
+    const up = await sb.storage.from('seikai').upload(path, blob, { contentType:'image/webp', upsert:false });
+    if (up.error) throw up.error;
+    const url = sb.storage.from('seikai').getPublicUrl(path).data.publicUrl;
+    const { data, error } = await sb.rpc('admin_set_image', { p_episode: E.id, p_slot: slot, p_key: key || '', p_url: url });
+    if (error) throw error;
+    E.content = data; msgEl.className = 'msg ok'; msgEl.textContent = '差し込みました。';
+    renderAdmin($('#view'), true);
+  }catch(err){ msgEl.className = 'msg err'; msgEl.textContent = '失敗しました：' + (err.message || err); }
+}
+
+function dropZone(id, label){ return `<label class="drop" id="${id}"><input type="file" accept="image/png,image/jpeg,image/webp" hidden><span>${label}</span></label><div class="msg" id="${id}-m" role="status"></div>`; }
+function bindDrop(id, fn){
+  const z = document.getElementById(id); if (!z) return; const m = document.getElementById(id+'-m');
+  const go = f => { if (f && /^image\//.test(f.type)) fn(f, m); else { m.className='msg err'; m.textContent='画像ファイル（PNG・JPEG・WebP）を置いてください。'; } };
+  z.querySelector('input').onchange = e => go(e.target.files[0]);
+  z.ondragover = e => { e.preventDefault(); z.classList.add('over'); };
+  z.ondragleave = () => z.classList.remove('over');
+  z.ondrop = e => { e.preventDefault(); z.classList.remove('over'); go(e.dataTransfer.files[0]); };
+}
+
+async function renderAdmin(box, keep = false){
+  if (!keep || !adminEps.length){
+    box.innerHTML = '<p class="loading">読み込み中…</p>';
+    const { data, error } = await sb.rpc('admin_episodes');
+    if (error){ box.innerHTML = `<p class="msg err">${esc(error.message)}</p>`; return; }
+    adminEps = data || [];
+  }
+  if (!adminEps.length){ box.innerHTML = '<p class="note">まだ話がありません。</p>'; return; }
+  const E = adminEps.find(x=>x.id===adminSel) || adminEps.find(x=>x.status==='draft') || adminEps.find(x=>x.status==='open') || adminEps[adminEps.length-1];
+  adminSel = E.id;
+  const c = E.content || {}, ST = {draft:'下書き',open:'受付中',closed:'締切',done:'結果発表済み'};
+  const pos = {...(c.map_pos || {A:[22,30],B:[83,36],C:[17,68],D:[83,70]})};
+  const thumb = (src, alt) => src ? `<img class="athumb" src="${esc(src)}" alt="${esc(alt)}">` : '<div class="athumb none">画像なし</div>';
+  const ships = (c.ships||[]).slice().sort((a,b)=>(b.new?1:0)-(a.new?1:0));
+  box.innerHTML = `<div class="admin">
+    <div class="sh">編集部　画像の差し込み</div>
+    <p class="note" style="margin:-4px 0 10px">Canvaなどで作った画像を、各欄にドラッグ（またはクリックして選択）すると、大きさを整えてそのまま紙面に差し込みます。艦と敵艦は白い余白を自動で切り落とします。</p>
+    <nav class="issues">${adminEps.map(x=>`<a class="issue" href="#admin" data-ep="${x.id}" ${x.id===E.id?'aria-current="page"':''}>第${x.no}話<span>${esc(x.title)}・${ST[x.status]||x.status}</span></a>`).join('')}</nav>
+    <section class="aslot"><div class="sh">扉絵</div><div class="arow">${thumb(imgSrc(c.hero,''), '扉絵')}<div style="flex:1">${dropZone('d-hero','扉絵をここに置く')}</div></div></section>
+    <section class="aslot"><div class="sh">戦略マップ</div>
+      <div id="amap">${c.map_image ? mapSvg(c.areas||[], {...c, map_pos: pos}) : '<div class="athumb none" style="width:100%;height:160px">マップ画像なし</div>'}</div>
+      ${c.map_image ? '<p class="note">丸い点をドラッグすると、A〜Dの札の位置を動かせます。動かしたら「位置を保存」を押してください。</p><button class="btn sm" id="pinSave">位置を保存</button> <span class="msg" id="pinMsg"></span>' : ''}
+      ${dropZone('d-map','マップ画像をここに置く')}</section>
+    <section class="aslot"><div class="sh">艦艇</div><div class="agrid">${ships.map((s,i)=>`<div class="acard"><b>${esc(s.name)}</b>${s.new?' <span class="newtag">新型</span>':''}${thumb(s.img ? imgSrc(s.img,'') : IMG[s.code], s.name)}${dropZone('d-ship-'+i, 'ここに置く')}</div>`).join('')}</div></section>
+    <section class="aslot"><div class="sh">敵艦</div><div class="agrid">${(c.enemies||[]).map((x,i)=>`<div class="acard"><b>${esc(x.name)}</b>${x.new?' <span class="newtag">新型</span>':''}${thumb(imgSrc(x.img, whaleImg(x.name)), x.name)}${dropZone('d-enemy-'+i, 'ここに置く')}</div>`).join('')}</div></section>
+  </div>`;
+  box.querySelectorAll('[data-ep]').forEach(a=>a.onclick = ev => { ev.preventDefault(); adminSel = Number(a.dataset.ep); renderAdmin(box, true); });
+  bindDrop('d-hero', (f,m)=>uploadSlot(E,'hero','',f,m));
+  bindDrop('d-map', (f,m)=>uploadSlot(E,'map','',f,m));
+  ships.forEach((s,i)=>bindDrop('d-ship-'+i, (f,m)=>uploadSlot(E,'ship',s.code,f,m)));
+  (c.enemies||[]).forEach((x,i)=>bindDrop('d-enemy-'+i, (f,m)=>uploadSlot(E,'enemy',x.name,f,m)));
+  // draggable pin anchors
+  const fig = box.querySelector('#amap .map'); if (!fig) return;
+  const pins = [...fig.querySelectorAll('.pin')], codes = (c.areas||[]).filter(a=>pos[a.code]).map(a=>a.code);
+  codes.forEach((code, i) => {
+    const dot = document.createElement('button'); dot.type = 'button'; dot.className = 'mdot'; dot.title = code + ' を動かす';
+    const place = () => { const [x,y] = pos[code]; dot.style.left = x+'%'; dot.style.top = y+'%'; pins[i].setAttribute('style', `${pinSide(x)};top:${y}%`); };
+    place(); fig.appendChild(dot);
+    dot.onpointerdown = ev => { ev.preventDefault(); dot.setPointerCapture(ev.pointerId);
+      dot.onpointermove = mv => { const r = fig.getBoundingClientRect();
+        pos[code] = [Math.round(Math.min(98, Math.max(2, (mv.clientX - r.left) / r.width * 100))), Math.round(Math.min(96, Math.max(4, (mv.clientY - r.top) / r.height * 100)))]; place(); };
+      dot.onpointerup = () => { dot.onpointermove = null; }; };
+  });
+  $('#pinSave').onclick = async () => {
+    const m = $('#pinMsg'); m.className = 'msg'; m.textContent = '保存しています…';
+    const { error } = await sb.rpc('admin_set_map_pos', { p_episode: E.id, p_pos: pos });
+    if (error){ m.className='msg err'; m.textContent = error.message; return; }
+    c.map_pos = pos; m.className = 'msg ok'; m.textContent = '保存しました。';
+  };
+}
+
 /* ---------- router ---------- */
-const VIEWS = ['home','paper','sortie','rank','guide','roster'];
+const VIEWS = ['home','paper','sortie','rank','guide','roster','admin'];
 function route(){
   let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'home';
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (v==='roster') v = 'rank';
+  if (v==='admin' && !isAdmin) v = 'home';
+  if (v==='admin'){ document.body.classList.remove('split-on'); renderAdmin(box); window.scrollTo(0,0); return; }
   if (!me && v!=='paper' && v!=='rank' && v!=='guide'){ renderRegister(box); return; }
   document.body.classList.toggle('split-on', v==='sortie' && !!ep && !!me);
   if (v==='home') renderHome(box);
@@ -644,7 +773,7 @@ window.addEventListener('hashchange', () => { if (session && !$('#app').hidden) 
 // before login: the guide can be read from the gate
 async function gateRoute(){
   if (location.hash === '#guide'){
-    if (!epsAll.length){ const r = await sb.from('episodes').select('id,no,title,status,content,report').neq('status','draft').order('no'); epsAll = r.data || []; }
+    if (!epsAll.length){ await ensureSeason(); const r = await sb.from('episodes').select('id,no,title,status,content,report').eq('season_id', SEASON).neq('status','draft').order('no'); epsAll = r.data || []; }
     $('#app').hidden = true; $('#gate').hidden = false; renderGuide($('#gate'), true); window.scrollTo(0,0);
   } else renderGate();
 }
