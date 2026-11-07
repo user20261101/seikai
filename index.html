@@ -305,6 +305,9 @@ dl.lrow dd{margin:0}
 .gkeys div{border:1px solid var(--rule);border-radius:6px;padding:10px 12px;background:var(--panel)}
 .gkeys dt{font-weight:700;color:var(--glow)}
 .gkeys dd{margin:2px 0 0;font-size:13.5px;line-height:1.7}
+.champ{border-color:var(--warn)}
+.champname{font-family:var(--f-head);font-weight:900;font-size:22px}
+.tabs a{font-size:13px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -318,7 +321,7 @@ dl.lrow dd{margin:0}
       <button class="btn ghost sm" id="logout">ログアウト</button>
     </header>
     <nav class="tabs" id="tabs" aria-label="メニュー">
-      <a href="#home" data-v="home">司令部</a><a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#roster" data-v="roster">名簿</a><a href="#guide" data-v="guide">遊び方</a>
+      <a href="#home" data-v="home">司令部</a><a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
     </nav>
     <main id="view" aria-live="polite"></main>
   </div>
@@ -574,19 +577,67 @@ function renderGuide(box, gate = false){
   </div>`;
 }
 
+/* ---------- ranking (replaces the roster): season total + each episode's top 10 with the No.1's story ---------- */
+function renderRanking(box, sel){
+  const done = (epsAll||[]).filter(x=>x.report?.entries?.length).sort((a,b)=>b.no-a.no);
+  if (!done.length){ box.innerHTML = '<p class="note">まだ結果の出た作戦はありません。最初の作戦の結果が出ると、ここにランキングが載ります。</p>'; return; }
+  const rankNow = Object.fromEntries((roster||[]).map(r=>[r.id, r.rank]));
+  // season total, summed from every published result
+  const tot = {};
+  for (const e of done) for (const x of e.report.entries){
+    const t = tot[x.id] ||= {id:x.id, name:x.name, merit:0, kills:0, sorties:0, mvp:0};
+    if (x.outcome !== '未出撃'){ t.sorties++; t.merit += x.merit||0; t.kills += x.kills||0; }
+  }
+  for (const e of done){ const top = e.report.ranking?.[0]; if (top && tot[top]) tot[top].mvp++; }
+  const season = Object.values(tot).filter(t=>t.sorties).sort((a,b)=>b.merit-a.merit || b.kills-a.kills || a.name.localeCompare(b.name,'ja'));
+  let pos = 0, prev = null;
+  season.forEach((t,i)=>{ const key = t.merit+'/'+t.kills; if (key!==prev){ pos = i+1; prev = key; } t.pos = pos; });
+  const myRow = me && season.find(t=>t.id===me.id);
+  const shown = season.slice(0, 20);
+  const srow = t => `<tr class="${me&&t.id===me.id?'mine':''}"><td class="num"><b>${t.pos}</b></td><td><b>${esc(t.name)}</b> <span class="note" style="margin:0">${esc(rankNow[t.id]||'')}</span>${t.mvp?` <span class="newtag" title="各回1位の回数">1位×${t.mvp}</span>`:''}</td><td class="num">${t.sorties}</td><td class="num">${t.kills}</td><td class="num"><b>${t.merit}</b></td></tr>`;
+
+  const cur = done.find(e=>e.no===Number(sel)) || done[0];
+  const rp = cur.report, byId = Object.fromEntries(rp.entries.map(x=>[x.id,x]));
+  const aname = c => (cur.content?.areas||[]).find(a=>a.code===c)?.name || '';
+  const top = (rp.ranking||[]).map(id=>byId[id]).filter(Boolean);
+  const first = top[0];
+  const story = first ? (rp.mvp && rp.mvp.name===first.name ? rp.mvp.text
+      : `${aname(first.area)}に出撃し、${first.kills?`敵艦${first.kills}隻を撃沈`:'最後まで戦い抜き'}、功績P${first.merit}を獲得した。`) : '';
+  const myEp = me && byId[me.id] && byId[me.id].outcome!=='未出撃' ? (()=>{ const sorted = rp.entries.filter(x=>x.outcome!=='未出撃').sort((a,b)=>b.merit-a.merit||b.kills-a.kills); return ((rp.ranking||[]).indexOf(me.id)+1) || sorted.findIndex(x=>x.id===me.id)+1; })() : 0;
+
+  box.innerHTML = `
+    <section style="margin-top:0"><div class="sh">全回通算　功績ランキング</div>
+      <p class="note" style="margin:-4px 0 8px">第${done[done.length-1].no}話〜第${done[0].no}話の獲得功績Pの合計（使ったPは引きません）</p>
+      <div class="tbl"><table><thead><tr><th class="num">順位</th><th>艦長</th><th class="num">出撃</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead>
+      <tbody>${shown.map(srow).join('')}${myRow && myRow.pos>20 ? `<tr><td colspan="5" class="note" style="text-align:center">…</td></tr>${srow(myRow)}`:''}</tbody></table></div>
+    </section>
+    <section><div class="sh">各回の功績ランキング</div>
+      <nav class="issues" aria-label="回を選ぶ">${done.map(e=>`<a class="issue" href="#rank/${e.no}" ${e.no===cur.no?'aria-current="page"':''}>第${e.no}話<span>${esc(e.title)}</span></a>`).join('')}</nav>
+      ${first?`<div class="panel champ"><div class="sh" style="margin:0 0 4px">第${cur.no}話　1位</div>
+        <div class="champname">${esc(first.rank)}　${esc(first.name)}</div>
+        <div class="note" style="margin:2px 0 0">${esc(first.area)} ${esc(aname(first.area))}／${esc(first.ship||'')}／撃沈 ${first.kills}／功績P +${first.merit}</div>
+        <p style="margin:8px 0 0">${esc(story)}</p></div>`:''}
+      ${myEp?`<p class="note" style="margin:8px 0 0">あなたはこの回 <b style="color:var(--glow)">${myEp}位</b> でした。</p>`:''}
+      <div class="tbl" style="margin-top:10px"><table><thead><tr><th class="num">順位</th><th>艦長</th><th>宙域・艦</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead>
+      <tbody>${top.map((x,i)=>`<tr class="${me&&x.id===me.id?'mine':''}"><td class="num"><b>${i+1}</b></td><td><b>${esc(x.name)}</b> <span class="note" style="margin:0">${esc(x.rank)}</span></td><td>${esc(x.area)} ${esc(aname(x.area))}<span class="note" style="margin:0;display:block">${esc(x.ship||'')}</span></td><td class="num">${x.kills}</td><td class="num"><b>${x.merit}</b></td></tr>`).join('')}</tbody></table></div>
+      <p class="note"><a href="#paper/${cur.no}">第${cur.no}話の紙面で全員の戦闘記録を読む</a></p>
+    </section>`;
+}
+
 /* ---------- router ---------- */
-const VIEWS = ['home','paper','sortie','roster','guide'];
+const VIEWS = ['home','paper','sortie','rank','guide','roster'];
 function route(){
   let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'home';
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
-  if (!me && v!=='paper' && v!=='roster' && v!=='guide'){ renderRegister(box); return; }
+  if (v==='roster') v = 'rank';
+  if (!me && v!=='paper' && v!=='rank' && v!=='guide'){ renderRegister(box); return; }
   document.body.classList.toggle('split-on', v==='sortie' && !!ep && !!me);
   if (v==='home') renderHome(box);
   else if (v==='paper'){ const bk = arg && epsAll.find(x=>x.no===Number(arg)); renderPaper(box, false, bk && bk.id!==ep?.id ? bk : (ep || last)); }
   else if (v==='sortie'){ if (!ep){ box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; return; } renderSortieView(box); }
   else if (v==='guide') renderGuide(box);
-  else renderRoster(box);
+  else renderRanking(box, arg);
   window.scrollTo(0,0);
 }
 window.addEventListener('hashchange', () => { if (session && !$('#app').hidden) route(); else if (!session) gateRoute(); });
