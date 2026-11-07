@@ -321,6 +321,12 @@ dl.lrow dd{margin:0}
 .drop:hover,.drop.over{border-color:var(--glow);color:var(--glow);background:rgba(159,216,234,.06)}
 .mdot{position:absolute;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:2px solid #fff;background:var(--warn);box-shadow:0 0 0 2px #000;cursor:grab;touch-action:none;z-index:3;padding:0}
 #amap .map{touch-action:none}
+.todo-strip{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 20px;padding:12px 16px;border:1px solid var(--glow);border-radius:8px;background:rgba(159,216,234,.07)}
+.todo-strip.warn{border-color:var(--warn);background:rgba(230,168,92,.08)}
+.todo-strip.ok{border-color:var(--good);background:rgba(134,214,166,.06)}
+.todo-strip b{display:block;font-size:15.5px}
+.todo-strip span{display:block;font-size:13px;color:var(--sub);margin-top:2px}
+.todo-strip .btn{text-decoration:none;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -334,7 +340,7 @@ dl.lrow dd{margin:0}
       <button class="btn ghost sm" id="logout">ログアウト</button>
     </header>
     <nav class="tabs" id="tabs" aria-label="メニュー">
-      <a href="#home" data-v="home">司令部</a><a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
+      <a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#home" data-v="home">司令部</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
     </nav>
     <main id="view" aria-live="polite"></main>
   </div>
@@ -509,7 +515,7 @@ function renderPaper(box, ref = false, E = ep){
       ? issuesNav(E.no) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
       : issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
-    box.innerHTML = issuesNav(E.no) + epHead() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
+    box.innerHTML = issuesNav(E.no) + epHead() + todoStrip() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
   }
 }
 
@@ -754,7 +760,7 @@ async function renderAdmin(box, keep = false){
 /* ---------- router ---------- */
 const VIEWS = ['home','paper','sortie','rank','guide','roster','admin'];
 function route(){
-  let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'home';
+  let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'paper';   // first stop: the current issue
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (v==='roster') v = 'rank';
@@ -834,6 +840,19 @@ function renderReport(L = last, title = '前回の結果'){
   </section>`;
 }
 
+
+/* what this captain should do now, shown on top of the current issue */
+function todoStrip(){
+  if (!ep) return '';
+  const dl = esc(dlText());
+  if (!me) return `<div class="todo-strip"><div><b>艦長を登録すると、この作戦に出撃できます</b><span>名前と能力値を決めるだけ。締切 ${dl}</span></div><a class="btn" href="#home">艦長を登録する</a></div>`;
+  if (me.state !== 'active') return '';
+  const o = myOrder;
+  if (!o) return `<div class="todo-strip warn"><div><b>第${ep.no}話の出撃指示がまだです</b><span>締切 ${dl}　紙面を読んで、出撃する宙域を決めましょう</span></div><a class="btn" href="#sortie">出撃指示を出す</a></div>`;
+  const a = ep.content.areas.find(x=>x.code===o.area), s = ep.content.ships.find(x=>x.code===o.ship_code);
+  return `<div class="todo-strip ok"><div><b>第${ep.no}話の出撃指示は提出済みです</b><span>${esc(o.area)} ${esc(a?.name||'')}／${esc(s?.name||o.ship_code)}／方針 ${esc(o.stance||'標準')}　締切 ${dl} までは出し直せます</span></div><a class="btn ghost" href="#sortie">見直す</a></div>`;
+}
+
 /* ---------- paper (紙面) ---------- */
 /* ---------- registration ---------- */
 function renderRegister(box){
@@ -861,6 +880,7 @@ function renderRegister(box){
     $('#rBtn').disabled = true; msg.textContent = '登録しています…';
     const { error } = await sb.rpc('create_character', { p_name: $('#rName').value.trim(), p_gender: document.querySelector('input[name=rGender]:checked').value, p_appearance: $('#rLook').value, p_stats: st, p_portrait_ok: $('#rPortrait').checked });
     if (error){ msg.className='msg err'; msg.textContent = error.message; $('#rBtn').disabled=false; return; }
+    if (location.hash !== '#paper') history.replaceState(null, '', '#paper');   // registered: back to the issue, now with the order button
     await loadAll();
   };
 }
