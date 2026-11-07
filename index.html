@@ -129,7 +129,7 @@ input[type=email],input[type=password]{width:100%;background:var(--bg);border:1p
 .bar .meta{color:var(--sub);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar .meta b{color:var(--ink)}
 .btn.sm{padding:6px 12px;font-size:13px}
-.tabs{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg);border-bottom:1px solid var(--rule);margin:0 -16px 22px;padding:0 16px}
+.tabs{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);background:var(--bg);border-bottom:1px solid var(--rule);margin:0 -16px 22px;padding:0 16px}
 .tabs a{text-align:center;padding:11px 0 9px;color:var(--sub);text-decoration:none;font-weight:700;font-size:14px;border-bottom:2px solid transparent}
 .tabs a[aria-current=page]{color:var(--glow);border-bottom-color:var(--glow)}
 .ephead{margin-bottom:18px}
@@ -280,6 +280,31 @@ dl.lrow dd{margin:0}
 .lgauge b{color:var(--ink)}
 .ending{border-color:var(--warn);margin-bottom:6px}
 .capt{display:inline-block;margin-left:6px;font-size:12px;font-weight:700}
+
+.gatelink{display:block;text-align:center;padding:10px;margin:0;border:1px solid var(--rule);border-top:0;border-bottom:0;background:var(--panel);font-weight:700;font-size:14px}
+.tabs a{font-size:13.5px}
+.guide{max-width:1000px;margin:0 auto}
+.gtitle{font-size:clamp(26px,6vw,40px);font-weight:900;letter-spacing:.04em;margin-top:2px}
+.glead{margin:10px 0 18px;line-height:1.9}
+.gband{background:var(--ink);color:var(--bg);font-weight:900;padding:5px 12px;letter-spacing:.08em;margin:0 0 12px;font-family:var(--f-head)}
+.gcols{display:grid;gap:24px}
+@media(min-width:860px){.gcols{grid-template-columns:1fr 1.15fr}}
+.gsteps{list-style:none;margin:0;padding:0}
+.gsteps li{padding:0 0 12px}
+.gsteps b{font-size:15.5px}
+.gsteps p{margin:2px 0 0;font-size:14px;color:var(--sub);line-height:1.75}
+.tl{width:100%;border-collapse:collapse;font-size:14px;border:1px solid var(--rule)}
+.tl th{width:5.2em;text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--rule);background:var(--panel);color:var(--glow);font-family:var(--f-head);white-space:nowrap}
+.tl td{padding:8px 10px;border-bottom:1px solid var(--rule)}
+.tl td p{margin:2px 0 0;font-size:13px;color:var(--sub);line-height:1.6}
+.tl td a{color:var(--ink)}
+.tl .tl-end{color:var(--warn);font-weight:700}
+.tl-lock td,.tl-lock th{opacity:.45}
+.gkeys{display:grid;gap:8px;margin:0}
+@media(min-width:860px){.gkeys{grid-template-columns:1fr 1fr}}
+.gkeys div{border:1px solid var(--rule);border-radius:6px;padding:10px 12px;background:var(--panel)}
+.gkeys dt{font-weight:700;color:var(--glow)}
+.gkeys dd{margin:2px 0 0;font-size:13.5px;line-height:1.7}
 </style>
 </head>
 <body>
@@ -293,7 +318,7 @@ dl.lrow dd{margin:0}
       <button class="btn ghost sm" id="logout">ログアウト</button>
     </header>
     <nav class="tabs" id="tabs" aria-label="メニュー">
-      <a href="#home" data-v="home">司令部</a><a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#roster" data-v="roster">名簿</a>
+      <a href="#home" data-v="home">司令部</a><a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#roster" data-v="roster">名簿</a><a href="#guide" data-v="guide">遊び方</a>
     </nav>
     <main id="view" aria-live="polite"></main>
   </div>
@@ -328,7 +353,7 @@ async function boot(){
   if (!window.supabase){ $('#gate').hidden=false; $('#gate').innerHTML = '<p class="msg err">接続用の部品を読み込めませんでした。通信状況を確認して、ページを再読み込みしてください。</p>'; return; }
   sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
   ({ data: { session } } = await sb.auth.getSession());
-  if (session) await enterApp(); else renderGate();
+  if (session) await enterApp(); else await gateRoute();
 }
 
 /* ---------- gate (login / sign-up) ---------- */
@@ -338,6 +363,7 @@ function renderGate(){
   g.innerHTML = `<div class="gate">
     <div class="title"><img class="logo" src="${IMG.logo}" alt="" style="width:64px;height:64px;border-radius:6px;border:1px solid var(--rule)"><div><div class="series">星海戦記</div><div style="color:var(--sub);font-size:13px">読者参加型 宇宙艦隊戦記</div></div></div>
     <img class="hero" src="${IMG.hero}" alt="クジラ型艦と交戦する宙航軍の艦隊">
+    <a class="gatelink" href="#guide">はじめての方へ：遊び方とゲームの流れ</a>
     <form class="card" id="authForm" novalidate>
       <div class="seg" role="group" aria-label="ログインか新規登録か"><button type="button" data-m="login" aria-pressed="true">ログイン</button><button type="button" data-m="signup" aria-pressed="false">新規登録</button></div>
       <div class="field"><label for="aEmail">メールアドレス</label><input type="email" id="aEmail" autocomplete="email" required></div>
@@ -499,21 +525,78 @@ function renderSortieView(box){
   sheet.addEventListener('click', e => { if (e.target === sheet) close(); });   // tap the dimmed area to close
 }
 
+/* ---------- 遊び方 (game guide): the flow of one episode + the war's timeline ---------- */
+const GUIDE_STEPS = [
+  ['艦長を登録する','メールアドレスで登録し、士官登録をします。名前（全角カタカナ10文字まで）を決め、攻撃・操艦・指揮・工学・直感の5つの能力に合計25点を配分します。少尉、功績P20からのスタートです。'],
+  ['紙面を読む','「紙面」タブで今回の作戦を読みます。4つの宙域の危険度・推奨能力・有効な装備、艦艇と装備の性能、敵艦の情報が載っています。どこが自分の艦長に向いているか、どこが手薄になりそうかを考えましょう。'],
+  ['出撃指示書を出す','「出撃」タブの指示書で、部隊（宙域）・艦艇・装備（4つまで）・作戦方針（積極／標準／慎重）を選びます。功績Pが足りれば昇進もできます（参加した回の次の回から）。締切までは何度でも出し直せます。'],
+  ['締切を待つ','締切が来ると受付が閉まり、編集部が判定します。能力・艦・装備に、その場の運が加わって戦いの行方が決まります。宙域の戦いには、敵味方のNPC艦隊も加わっています。'],
+  ['結果を読む','次の紙面の冒頭に前回の結果が載ります。宙域ごとの戦況、全艦長の戦闘記録、最活躍者、活躍ランキング。自分の結果は「司令部」と出撃指示書の下でも確認できます。'],
+  ['次の作戦へ','獲得した功績Pで艦の乗り換えや装備の追加、昇進ができます。艦を撃沈されても艦長は脱出しています（負傷すると次の戦闘だけ能力が下がります）。艦を選び直して、次の作戦に臨みましょう。'],
+];
+const PREWAR = [
+  ['開戦前','平時の航宙軍','人類は星系ジャンプで版図を広げ、首都星系ユクサを中心とする統合宇宙圏を築いた。明確な敵のいない時代、航宙軍の艦隊は最小限に抑えられ、議会からは「金食い虫」とまで言われていた。'],
+];
+function renderGuide(box, gate = false){
+  const eps = (epsAll || []).slice().sort((a,b)=>a.no-b.no);
+  const total = Math.max(6, eps.length);
+  const timeline = [
+    ...PREWAR.map(([when,title,text])=>`<tr><th>${esc(when)}</th><td><b>${esc(title)}</b><p>${esc(text)}</p></td></tr>`),
+    ...eps.map(x=>{ const c = x.content||{}; const rp = x.report||{};
+      const st = x.status==='open' ? '<span class="pill ng">出撃受付中</span>' : x.status==='closed' ? '<span class="pill ng">判定中</span>' : rp.judge ? '' : '';
+      return `<tr><th>第${x.no}話</th><td><b><a href="#paper${x.id===ep?.id?'':'/'+x.no}">${esc(x.title)}</a></b>　<span class="note" style="margin:0">${esc(c.place||'')}</span> ${st}
+        <p>${esc(rp.headline || (x.status==='open' ? '作戦進行中。あなたの出撃を待っている。' : ''))}</p>
+        ${rp.ending?`<p class="tl-end">${esc(rp.ending.label||'')}「${esc(rp.ending.title||'')}」</p>`:''}</td></tr>`; }),
+    ...Array.from({length: total - eps.length}, (_,i)=>`<tr class="tl-lock"><th>第${eps.length+i+1}話</th><td><b>？？？</b><p>未公開</p></td></tr>`),
+  ].join('');
+  box.innerHTML = `<div class="guide">
+    ${gate?'<p style="margin:0 0 12px"><a href="#">← ログイン画面へ戻る</a></p>':''}
+    <div class="sh">GAME GUIDE</div>
+    <h2 class="gtitle">この読者参加ゲームについて</h2>
+    <p class="glead">『星海戦記』は、宇宙クジラと人類の戦争を描く読者参加型の戦記です。あなたは統合宇宙圏・航宙軍の艦長として艦に乗り込み、2週間に一度発表される作戦に出撃します。敵味方の大艦隊がぶつかる戦場で、あなたの選択と戦果が紙面に記録され、物語の行方を左右していきます。</p>
+    <div class="gcols">
+      <section><div class="gband">早わかり　ゲームの流れ</div>
+        <ol class="gsteps">${GUIDE_STEPS.map(([t,d],i)=>`<li><b>${'①②③④⑤⑥'[i]} ${esc(t)}</b><p>${esc(d)}</p></li>`).join('')}</ol>
+      </section>
+      <section><div class="gband">星海戦記　タイムテーブル</div>
+        <table class="tl">${timeline}</table>
+        <p class="note">各話の結果しだいで、その先の作戦の難しさや登場する艦が変わります。最終話のあとの戦況で、結末は「完全勝利／判定勝利／引き分け／判定敗北／完全敗北」に分かれます。</p>
+      </section>
+    </div>
+    <section><div class="gband">覚えておきたいこと</div>
+      <dl class="gkeys">
+        <div><dt>功績P</dt><dd>出撃すれば最低5P。撃沈数や危険度、帰還で増えます。艦・装備・昇進に使います。乗り換えると前の艦は半額で下取り。</dd></div>
+        <div><dt>作戦方針</dt><dd>積極は戦果が増えるが沈みやすい。慎重はその逆。宙域全体の勝敗には影響しません。</dd></div>
+        <div><dt>艦と艦長</dt><dd>艦は「帰還」か「撃沈」。撃沈されると艦と装備を失いますが、艦長は脱出します。負傷すると次の戦闘だけ全能力値−1。</dd></div>
+        <div><dt>戦況ゲージ</dt><dd>宙域ごとの勝敗で上下します。主戦場は2倍。「今後の戦局に影響する」宙域の結果は、先の話の展開を変えます。</dd></div>
+      </dl>
+    </section>
+  </div>`;
+}
+
 /* ---------- router ---------- */
-const VIEWS = ['home','paper','sortie','roster'];
+const VIEWS = ['home','paper','sortie','roster','guide'];
 function route(){
   let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'home';
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===v ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
-  if (!me && v!=='paper' && v!=='roster'){ renderRegister(box); return; }
+  if (!me && v!=='paper' && v!=='roster' && v!=='guide'){ renderRegister(box); return; }
   document.body.classList.toggle('split-on', v==='sortie' && !!ep && !!me);
   if (v==='home') renderHome(box);
   else if (v==='paper'){ const bk = arg && epsAll.find(x=>x.no===Number(arg)); renderPaper(box, false, bk && bk.id!==ep?.id ? bk : (ep || last)); }
   else if (v==='sortie'){ if (!ep){ box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; return; } renderSortieView(box); }
+  else if (v==='guide') renderGuide(box);
   else renderRoster(box);
   window.scrollTo(0,0);
 }
-window.addEventListener('hashchange', () => { if (session && !$('#app').hidden) route(); });
+window.addEventListener('hashchange', () => { if (session && !$('#app').hidden) route(); else if (!session) gateRoute(); });
+// before login: the guide can be read from the gate
+async function gateRoute(){
+  if (location.hash === '#guide'){
+    if (!epsAll.length){ const r = await sb.from('episodes').select('id,no,title,status,content,report').neq('status','draft').order('no'); epsAll = r.data || []; }
+    $('#app').hidden = true; $('#gate').hidden = false; renderGuide($('#gate'), true); window.scrollTo(0,0);
+  } else renderGate();
+}
 
 /* ---------- home (司令部) ---------- */
 function renderHome(box){
