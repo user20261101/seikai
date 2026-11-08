@@ -191,6 +191,11 @@ tr.mine td{background:rgba(159,216,234,.08)}
 .chip:hover{border-color:var(--glow);color:var(--glow)}
 .refprev{margin-top:30px}.refprev>summary{font-size:14px}
 .fsh{margin-top:28px}
+.newcomer{border:1px dashed var(--rule);border-radius:8px;padding:12px 14px;margin-bottom:6px}
+.newcomer .nc-lead{margin:0 0 10px;font-size:13.5px;color:var(--ink);line-height:1.8}
+.newcomer .field{margin-bottom:10px}
+.ncauth{border-top:1px solid var(--rule);margin-top:14px;padding-top:12px}
+.ncauth .field{margin:10px 0 0}
 #formAnchor{scroll-margin-top:56px}
 @media(min-width:1100px){.fsh{display:none}}
 .refbtn{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:20;border:0;border-radius:99px;padding:12px 20px;font-weight:700;background:var(--warn);color:#0d1015;box-shadow:0 6px 20px rgba(0,0,0,.5);cursor:pointer}
@@ -440,7 +445,7 @@ const whaleImg = n => /大型|マッコウ/.test(n)?IMG.whale_big:/小型|ミン
 const imgSrc = (v, fallback) => v && /^(https:|data:image\/|img\/[\w.-]+$)/.test(v) ? v : fallback;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [], lastOrder = null, myLetter = null, myOrders = {}, myLetters = {};
+let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [], lastOrder = null, myLetter = null, myOrders = {}, myLetters = {}, newcomerDraft = null, newcomerErr = '', pendingDone = false;
 const AUTH_JA = m => /Invalid login credentials/i.test(m) ? 'メールアドレスかパスワードが違います。'
   : /already registered|already been registered/i.test(m) ? 'このメールアドレスは登録済みです。「ログイン」から入ってください。'
   : /Password should be at least/i.test(m) ? 'パスワードは6文字以上にしてください。'
@@ -453,7 +458,7 @@ async function boot(){
   if (!window.supabase){ $('#gate').hidden=false; $('#gate').innerHTML = '<p class="msg err">接続用の部品を読み込めませんでした。通信状況を確認して、ページを再読み込みしてください。</p>'; return; }
   sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
   ({ data: { session } } = await sb.auth.getSession());
-  if (session) await enterApp(); else await gateRoute();
+  await enterApp();   // guests too: the paper is public, sign-up happens at the 出撃 button
 }
 
 /* ---------- gate (login / sign-up) ---------- */
@@ -500,7 +505,10 @@ function renderGate(){
 async function enterApp(){
   $('#gate').hidden = true; $('#gate').innerHTML = ''; $('#app').hidden = false;
   $('#logo').src = IMG.logo;
-  $('#logout').onclick = async () => { await sb.auth.signOut(); session = null; me = null; location.hash = ''; renderGate(); };
+  const lb = $('#logout');
+  if (session){ lb.textContent = 'ログアウト'; lb.onclick = async () => { await sb.auth.signOut(); session = null; me = null; isAdmin = false; loadAll.adminChecked = false;
+      document.querySelector('#tabs a[data-v=admin]')?.remove(); history.replaceState(null, '', '#paper'); await enterApp(); }; }
+  else { lb.textContent = 'ログイン'; lb.onclick = () => { location.hash = '#login'; }; }
   await loadAll();
 }
 
@@ -525,8 +533,10 @@ async function loadAll(){
   const r = await sb.from('characters').select('id,name,rank,state').eq('season_id', SEASON).order('id');
   roster = r.data || [];
   me = null; myOrder = null; myResults = []; lastOrder = null; myLetter = null; myOrders = {}; myLetters = {};
-  const m = await sb.from('characters').select('*').eq('season_id', SEASON).eq('user_id', session.user.id).maybeSingle();
+  const m = session ? await sb.from('characters').select('*').eq('season_id', SEASON).eq('user_id', session.user.id).maybeSingle() : { data: null };
   me = m.data;
+  if (!me && session && ep){ const pd = readPending(); if (pd){ clearPending(); const err = await submitNewcomer(pd);
+    if (!err){ pendingDone = true; return loadAll(); } newcomerDraft = pd; newcomerErr = err; } }
   if (me){
     if (ep){ const o = await sb.from('orders').select('*').eq('episode_id', ep.id).eq('character_id', me.id).maybeSingle(); myOrder = o.data; }
     const rs = await sb.from('results').select('episode_id,area,ship_code,outcome,merit_gained,kills,highlight').eq('character_id', me.id).order('episode_id',{ascending:false});
@@ -542,13 +552,14 @@ async function loadAll(){
     }
     lastOrder = last ? myOrders[last.id] || null : null; myLetter = last ? myLetters[last.id] || null : null;
   }
-  if (!loadAll.adminChecked){ const ia = await sb.rpc('is_admin'); isAdmin = !!ia.data; loadAll.adminChecked = true;
+  if (session && !loadAll.adminChecked){ const ia = await sb.rpc('is_admin'); isAdmin = !!ia.data; loadAll.adminChecked = true;
     if (isAdmin && !document.querySelector('#tabs a[data-v=admin]')){ const t = document.createElement('a'); t.href = '#admin'; t.dataset.v = 'admin'; t.textContent = '編集部'; $('#tabs').appendChild(t); $('#tabs').classList.add('six'); } }
   renderWho(); route();
+  if (pendingDone && me){ pendingDone = false; const m = $('#sMsg'); if (m){ m.className='msg ok'; m.textContent = `入隊おめでとうございます、${me.rank} ${me.name}。第${ep?.no}話の出撃指示を受け付けました。締切までは何度でも出し直せます。`; m.scrollIntoView({block:'center'}); } }
 }
 
 function renderWho(){
-  $('#who').innerHTML = me ? `<b>${esc(me.rank)}　${esc(me.name)}</b>　功績P <b>${me.merit}</b>` : esc(session.user.email || 'ログイン中');
+  $('#who').innerHTML = me ? `<b>${esc(me.rank)}　${esc(me.name)}</b>　功績P <b>${me.merit}</b>` : session ? esc(session.user.email || 'ログイン中') : 'ゲスト　紙面は誰でも読めます';
 }
 function dlText(){ return ep?.deadline ? new Date(ep.deadline).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'long',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'}) : '未定'; }
 function epHead(){
@@ -870,28 +881,78 @@ async function renderAdmin(box, keep = false){
   };
 }
 
+/* ---------- newcomers: a captain sheet + the order, sent with sign-up ----------
+   A sheet filled in before the account exists is kept in this browser until the first login
+   (needed when sign-up asks for e-mail confirmation), then registered and sent automatically. */
+const PENDING_KEY = 'seikai_pending_sortie';
+function savePending(d){ try { localStorage.setItem(PENDING_KEY, JSON.stringify({...d, ep: ep?.id, at: Date.now()})); } catch(e){} }
+function readPending(){ try { const d = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); return d && d.ep === ep?.id ? d : null; } catch(e){ return null; } }
+function clearPending(){ try { localStorage.removeItem(PENDING_KEY); } catch(e){} }
+async function submitNewcomer(d){
+  const c = await sb.rpc('create_character', { p_name: d.name, p_gender: d.gender, p_appearance: '', p_stats: d.stats, p_portrait_ok: true });
+  if (c.error) return c.error.message;
+  const o = d.order;
+  const r = await sb.rpc('submit_order', { p_area: o.area, p_ship: o.ship, p_equipment: o.eq, p_wingman: null, p_promote: false, p_stat_up: {}, p_free_action: '', p_stance: o.stance });
+  return r.error ? `艦長は登録できましたが、出撃指示を送れませんでした（${r.error.message}）。出撃タブから出し直してください。` : '';
+}
+function renderLogin(box){
+  document.body.classList.remove('split-on');
+  let mode = 'login';
+  box.innerHTML = `<div class="gate" style="padding-top:8px"><form class="card" id="authForm" novalidate>
+      <h2 style="font-size:20px;margin-top:0">ログイン</h2>
+      <p class="note" style="margin-top:0">はじめての方は、<a href="#sortie">出撃タブ</a>で艦長の名前と出撃先を決めてから「出撃する」を押すと、そのまま登録できます。</p>
+      <div class="seg" role="group" aria-label="ログインか新規登録か"><button type="button" data-m="login" aria-pressed="true">ログイン</button><button type="button" data-m="signup" aria-pressed="false">新規登録だけする</button></div>
+      <div class="field"><label for="aEmail">メールアドレス</label><input type="email" id="aEmail" autocomplete="email" required></div>
+      <div class="field"><label for="aPass">パスワード<small id="aPassHint"></small></label><input type="password" id="aPass" autocomplete="current-password" minlength="6" required></div>
+      <div class="field" id="aPass2Wrap" hidden><label for="aPass2">パスワード（確認）</label><input type="password" id="aPass2" autocomplete="new-password"></div>
+      <button class="btn full" id="aBtn" type="submit">ログイン</button>
+      <div class="msg" id="aMsg" role="status"></div>
+    </form></div>`;
+  const setMode = m => { mode = m;
+    box.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.m===m));
+    $('#aPass2Wrap').hidden = m!=='signup'; $('#aBtn').textContent = m==='signup'?'登録する':'ログイン';
+    $('#aPass').autocomplete = m==='signup'?'new-password':'current-password';
+    $('#aPassHint').textContent = m==='signup'?'6文字以上':''; $('#aMsg').textContent=''; };
+  box.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+  $('#authForm').onsubmit = async e => {
+    e.preventDefault();
+    const msg = $('#aMsg'); msg.className = 'msg err';
+    const email = $('#aEmail').value.trim(), pass = $('#aPass').value;
+    if (!email || !pass){ msg.textContent = 'メールアドレスとパスワードを入れてください。'; return; }
+    if (mode==='signup'){
+      if (pass.length < 6){ msg.textContent = 'パスワードは6文字以上にしてください。'; return; }
+      if (pass !== $('#aPass2').value){ msg.textContent = '確認用のパスワードが一致しません。'; return; }
+    }
+    $('#aBtn').disabled = true; msg.className='msg'; msg.textContent = mode==='signup'?'登録しています…':'ログインしています…';
+    const { data, error } = mode==='signup' ? await sb.auth.signUp({ email, password: pass }) : await sb.auth.signInWithPassword({ email, password: pass });
+    $('#aBtn').disabled = false;
+    if (error){ msg.className='msg err'; msg.textContent = AUTH_JA(error.message); return; }
+    if (!data.session){ msg.className='msg ok'; msg.textContent = '確認メールを送りました。メール内のリンクを開いてから、ログインしてください。'; setMode('login'); return; }
+    session = data.session; history.replaceState(null, '', '#sortie'); await enterApp();
+  };
+}
+
 /* ---------- router ---------- */
-const VIEWS = ['register','home','paper','sortie','rank','guide','roster','admin'];
+const VIEWS = ['login','register','home','paper','sortie','rank','guide','roster','admin'];
 function route(){
-  let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'sortie';   // first stop: the current issue + order form
+  let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = session ? 'sortie' : 'paper';   // guests start on the paper, captains on the order form
   const tv = v;
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===tv ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (v==='roster') v = 'rank';
-  if (v==='home') v = me ? 'sortie' : 'register';   // 司令部 tab retired: registered captains go to 出撃
+  if (v==='home' || v==='register') v = 'sortie';   // sign-up now lives on the 出撃 page
   if (v==='admin' && !isAdmin) v = 'sortie';
   if (v==='admin'){ document.body.classList.remove('split-on'); renderAdmin(box); window.scrollTo(0,0); return; }
-  const canOrder = !!ep && !!me && me.state==='active';
-  if (!me && v!=='paper' && v!=='sortie' && v!=='rank' && v!=='guide'){ renderRegister(box); return; }
+  const canOrder = !!ep && ((!!me && me.state==='active') || !me);   // no captain yet = the newcomer sheet
   document.body.classList.toggle('split-on', v==='sortie' && canOrder);
-  if (v==='register'){ if (me){ location.replace('#sortie'); return; } renderRegister(box); }
+  if (v==='login'){ if (session){ location.replace('#sortie'); return; } renderLogin(box); }
   else if (v==='paper'){ const bk = arg && epsAll.find(x=>x.no===Number(arg)); renderPaper(box, false, bk && bk.id!==ep?.id ? bk : (ep || last)); }
   else if (v==='sortie'){ if (canOrder) renderSortieView(box); else if (ep || last) renderPaper(box, false, ep || last, true); else box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; }
   else if (v==='guide') renderGuide(box);
   else renderRanking(box, arg);
   window.scrollTo(0,0);
 }
-window.addEventListener('hashchange', () => { if (session && !$('#app').hidden) route(); else if (!session) gateRoute(); });
+window.addEventListener('hashchange', () => { if (!$('#app').hidden) route(); });
 // before login: the guide can be read from the gate
 async function gateRoute(){
   if (location.hash === '#guide'){
@@ -963,7 +1024,7 @@ function renderReport(L = last, title = '前回の結果'){
 function todoStrip(){
   if (!ep) return '';
   const dl = esc(dlText());
-  if (!me) return `<div class="todo-strip"><div><b>艦長を登録すると、この作戦に出撃できます</b><span>名前と能力値を決めるだけ。締切 ${dl}</span></div><a class="btn" href="#register">艦長を登録する</a></div>`;
+  if (!me) return `<div class="todo-strip"><div><b>この作戦に、あなたも出撃しませんか</b><span>名前と能力値を決めて、宙域と艦を選ぶだけ。艦長の登録は「出撃する」ボタンと同時にできます。締切 ${dl}</span></div><a class="btn" href="#sortie">出撃してみる</a></div>`;
   if (me.state !== 'active') return `<div class="todo-strip warn"><div><b>今回は出撃できません</b><span>${esc({missing:'消息不明のため、今回は出撃できません',lost:'戦没',retired:'退役'}[me.state]||me.state)}</span></div></div>`;
   const o = myOrder;
   if (!o) return `<div class="todo-strip warn"><div><b>第${ep.no}話の出撃指示がまだです</b><span>締切 ${dl}　紙面を読んで、出撃する宙域を決めましょう</span></div><a class="btn" href="#sortie">出撃指示を出す</a></div>`;
@@ -1099,24 +1160,32 @@ function renderSortie(box){
   const shipOf = code => c.ships.find(s=>s.code===code);
   const eqOf = code => (c.equipment||[]).find(q=>q.code===code);
   const optsOf = s => s?.options || null;
-  const o = myOrder;
-  const initEq = (o?.equipment || me.equipment || []).slice(0,4);
-  const state = { area: o?.area || '', ship: o?.ship_code || me.ship_code || '', eq: [0,1,2,3].map(i=>initEq[i]||''), pick: new Set(initEq),
+  const fresh = !me;   // no captain yet: this sheet also registers one
+  const M = me || { name:'', rank:'少尉', merit:20, stats:{...(newcomerDraft?.stats || {attack:5,helm:5,command:5,engineering:5,intuition:5})},
+                    ship_code:null, equipment:[], joined_no: ep.no, state:'active', repair_due:0, injured:false };
+  const o = myOrder || (fresh && newcomerDraft ? { area: newcomerDraft.order.area, ship_code: newcomerDraft.order.ship, equipment: newcomerDraft.order.eq, stance: newcomerDraft.order.stance } : null);
+  let authMode = 'signup';
+  const initEq = (o?.equipment || M.equipment || []).slice(0,4);
+  const state = { area: o?.area || '', ship: o?.ship_code || M.ship_code || '', eq: [0,1,2,3].map(i=>initEq[i]||''), pick: new Set(initEq),
     promote: !!o?.promote, up: {...(o?.stat_up||{})}, stance: o?.stance || '標準', wing: o?.wingman_id ? String(o.wingman_id) : '' };
-  const missing = me.state === 'missing';
-  const canPromote = ep.no > (me.joined_no ?? 1);
+  const missing = M.state === 'missing';
+  const canPromote = ep.no > (M.joined_no ?? 1);
   if (!canPromote){ state.promote = false; state.up = {}; }
-  const nextRank = RANKS[RANKS.indexOf(me.rank)+1];
+  const nextRank = RANKS[RANKS.indexOf(M.rank)+1];
 
   box.innerHTML = `<form class="ocard" id="sortie" novalidate aria-labelledby="oTitle">
     <div class="otitle"><h2 id="oTitle">出撃指示書</h2><span>第${ep.no}話「${esc(ep.title)}」　締切 ${esc(dlText())}</span></div>
     <div class="ohead">
-      <dl class="oname"><div><dt>名前</dt><dd>${esc(me.name)}</dd></div><div><dt>階級</dt><dd>${esc(me.rank)}</dd></div></dl>
-      ${me.injured?'<div class="oinj">負傷中：今回の戦闘では全能力値が1下がります</div>':''}
+      ${fresh ? `<div class="newcomer"><p class="nc-lead">はじめての方へ：艦長の名前と能力値を決めて、出撃する宙域と艦を選ぶだけ。最後に「出撃する」を押すと、艦長の登録と出撃が同時に済みます。</p>
+        <div class="field"><label for="ncName">艦長の名前<small>全角カタカナ10文字まで。「・」「＝」も使えます</small></label><input type="text" id="ncName" maxlength="10" placeholder="例）アルト＝カミナギ" value="${esc(newcomerDraft?.name||'')}"></div>
+        <div class="field"><span class="lbl">性別</span><div class="choices two" style="grid-template-columns:repeat(3,1fr)">${['男','女','その他'].map((g,i)=>`<label class="choice"><input type="radio" name="ncGender" value="${g}" ${(newcomerDraft?.gender||'男')===g?'checked':''}><span class="t">${g}</span></label>`).join('')}</div></div>
+        <dl class="oname"><div><dt>階級</dt><dd>少尉（最初の階級）</dd></div><div><dt>功績P</dt><dd>20（艦を選ぶのに使います）</dd></div></dl></div>`
+      : `<dl class="oname"><div><dt>名前</dt><dd>${esc(M.name)}</dd></div><div><dt>階級</dt><dd>${esc(M.rank)}</dd></div></dl>`}
+      ${M.injured?'<div class="oinj">負傷中：今回の戦闘では全能力値が1下がります</div>':''}
     </div>
     <div class="ostats" id="sStats"></div>
     <div class="opromo">
-      <label class="ochk"><input type="checkbox" id="sPromote" ${!canPromote||!nextRank?'disabled':''}> ${nextRank?`昇進する　${esc(me.rank)}→${esc(nextRank)}（${RANK_COST[me.rank]}P）`:'これ以上昇進できません'}</label>
+      ${fresh ? `<span class="ochk"><input type="checkbox" id="sPromote" hidden disabled>能力値を割り振る（合計25・各0〜10）</span>` : `<label class="ochk"><input type="checkbox" id="sPromote" ${!canPromote||!nextRank?'disabled':''}>`}${fresh?'':` ${nextRank?`昇進する　${esc(M.rank)}→${esc(nextRank)}（${RANK_COST[M.rank]}P）`:'これ以上昇進できません'}</label>`}
       <span class="ohint" id="sUpHint" style="margin:0"></span>
     </div>
     ${missing?'<p class="msg err" style="margin:6px 0 0">前回消息不明のため、今回は出撃できません。</p>':''}
@@ -1131,26 +1200,30 @@ function renderSortie(box){
     <div class="orow"><span class="olbl">方針</span><div class="seg3" id="sStance" role="radiogroup" aria-label="作戦方針"></div></div>
 
     <div class="ledger" id="sCost" aria-live="polite"></div>
-    <button class="btn full" id="sBtn" ${missing?'disabled':''}>${o?'出撃指示を出し直す':'出撃する'}</button>
+    ${fresh && !session ? `<div class="ncauth"><div class="seg" role="group" aria-label="新規登録かログインか"><button type="button" data-m="signup" aria-pressed="true">はじめて（新規登録）</button><button type="button" data-m="login" aria-pressed="false">アカウントがある</button></div>
+      <div class="field"><label for="ncEmail">メールアドレス<small>結果（返信ハガキ）を読むときに使います</small></label><input type="email" id="ncEmail" autocomplete="email"></div>
+      <div class="field"><label for="ncPass">パスワード<small id="ncPassHint">6文字以上</small></label><input type="password" id="ncPass" autocomplete="new-password"></div>
+      <div class="field" id="ncPass2W"><label for="ncPass2">パスワード（確認）</label><input type="password" id="ncPass2" autocomplete="new-password"></div></div>` : ''}
+    <button class="btn full" id="sBtn" ${missing?'disabled':''}>${fresh ? (session ? '出撃する（艦長を登録）' : '出撃する（新規登録）') : o?'出撃指示を出し直す':'出撃する'}</button>
     <div class="msg" id="sMsg" role="status"></div>
-  </form>${lastResultCard()}`;
+  </form>${fresh ? '' : lastResultCard()}`;
 
   $('#sPromote').checked = state.promote;
 
-  const rankIdx = () => RANKS.indexOf(me.rank) + (state.promote?1:0);
-  const statsAfter = () => { const s={...me.stats}; if(state.promote) for(const k in state.up) s[k]+=state.up[k]; return s; };
+  const rankIdx = () => RANKS.indexOf(M.rank) + (state.promote?1:0);
+  const statsAfter = () => { const s={...M.stats}; if(state.promote) for(const k in state.up) s[k]+=state.up[k]; return s; };
   const shipNg = s => { const r=s.requires||{}; if(r.rank && rankIdx() < RANKS.indexOf(r.rank)) return `${r.rank}以上`; if(r.stats){ const sa=statsAfter(); for(const k in r.stats) if((sa[k]||0) < r.stats[k]) return `${SNAME[k]}${r.stats[k]}以上`; } return ''; };
-  const shipCost = s => me.ship_code===s.code ? (me.repair_due||0) : (s.free_from && me.ship_code===s.free_from ? 0 : s.cost);
+  const shipCost = s => M.ship_code===s.code ? (M.repair_due||0) : (s.free_from && M.ship_code===s.free_from ? 0 : s.cost);
   // trade-in: switching ships returns half the old ship's listed price (rounded down), minus unpaid repairs; upgrades (改修) return nothing
   const refund = () => {
-    const s = shipOf(state.ship); if (!s || !me.ship_code || s.code === me.ship_code) return 0;
-    if (s.free_from && me.ship_code === s.free_from) return 0;
-    const old = shipOf(me.ship_code); return old ? Math.max(0, Math.floor(old.cost / 2) - (me.repair_due || 0)) : 0;
+    const s = shipOf(state.ship); if (!s || !M.ship_code || s.code === M.ship_code) return 0;
+    if (s.free_from && M.ship_code === s.free_from) return 0;
+    const old = shipOf(M.ship_code); return old ? Math.max(0, Math.floor(old.cost / 2) - (M.repair_due || 0)) : 0;
   };
   const gross = () => {
-    let cost = state.promote ? (RANK_COST[me.rank]||0) : 0;
+    let cost = state.promote ? (RANK_COST[M.rank]||0) : 0;
     const s = shipOf(state.ship); if (s) cost += shipCost(s);
-    if (!optsOf(shipOf(state.ship))) for (const code of state.eq) if (code && !me.equipment.includes(code)) cost += eqOf(code)?.cost || 0;
+    if (!optsOf(shipOf(state.ship))) for (const code of state.eq) if (code && !M.equipment.includes(code)) cost += eqOf(code)?.cost || 0;
     return cost;
   };
   const calc = () => gross() - refund();
@@ -1158,8 +1231,8 @@ function renderSortie(box){
     $('#sArea').innerHTML = c.areas.map(a=>`<button type="button" role="radio" aria-checked="${state.area===a.code}" class="segb d-${esc(a.danger)}" data-v="${a.code}" title="${esc(a.name)}"><b>${esc(a.code)}</b><span>${esc(a.name)}</span></button>`).join('');
     const ar = c.areas.find(a=>a.code===state.area);
     $('#sAreaHint').innerHTML = ar ? `危険度 <b class="dl d-${esc(ar.danger)}">${esc(ar.danger)}</b>　推奨 ${ar.rec.map(k=>SNAME[k]).join('・')}　有効 ${ar.eq.join('・')}` : '部隊を選ぶと、その宙域の要点がここに出ます';
-    $('#sShip').innerHTML = `<option value="">選んでください</option>` + c.ships.map(s=>{ const ng=shipNg(s); const owned=me.ship_code===s.code; const free=s.free_from && me.ship_code===s.free_from;
-      return `<option value="${s.code}" ${ng?'disabled':''}>${esc(s.name)}　攻${s.atk}防${s.def}機${s.mob}　${owned?(me.repair_due?`乗艦中・修理${me.repair_due}P`:'乗艦中'):free?'無料改修':s.cost+'P'}${ng?`（${ng}）`:''}</option>`; }).join('');
+    $('#sShip').innerHTML = `<option value="">選んでください</option>` + c.ships.map(s=>{ const ng=shipNg(s); const owned=M.ship_code===s.code; const free=s.free_from && M.ship_code===s.free_from;
+      return `<option value="${s.code}" ${ng?'disabled':''}>${esc(s.name)}　攻${s.atk}防${s.def}機${s.mob}　${owned?(M.repair_due?`乗艦中・修理${M.repair_due}P`:'乗艦中'):free?'無料改修':s.cost+'P'}${ng?`（${ng}）`:''}</option>`; }).join('');
     $('#sShip').value = state.ship && !shipNg(shipOf(state.ship)||{}) ? state.ship : (state.ship='', '');
     const so = optsOf(shipOf(state.ship)), ar2 = c.areas.find(a=>a.code===state.area);
     if (so){
@@ -1174,17 +1247,25 @@ function renderSortie(box){
     } else {
     $('#sEqL').innerHTML = '装備<small>4つまで</small>'; $('#sEq').className = 'eq4';
     $('#sEq').innerHTML = state.eq.map((v,i)=>`<select data-i="${i}" aria-label="装備${i+1}"><option value="">― なし ―</option>${c.equipment.map(q=>{ const taken = state.eq.includes(q.code) && v!==q.code;
-      return `<option value="${q.code}" ${taken?'disabled':''} ${v===q.code?'selected':''}>${esc(q.name)}［${esc(q.type)}］${me.equipment.includes(q.code)?'所持':q.cost+'P'}</option>`; }).join('')}</select>`).join('');
+      return `<option value="${q.code}" ${taken?'disabled':''} ${v===q.code?'selected':''}>${esc(q.name)}［${esc(q.type)}］${M.equipment.includes(q.code)?'所持':q.cost+'P'}</option>`; }).join('')}</select>`).join('');
     }
     $('#sStance').innerHTML = STANCES.map(([k,d])=>`<button type="button" role="radio" aria-checked="${state.stance===k}" class="segb" data-v="${k}" title="${esc(d)}"><b>${k}</b></button>`).join('');
     const upTotal = Object.values(state.up).reduce((a,b)=>a+b,0);
     // stats are always shown; the +/- only light up while 「昇進する」 is checked
     const on = state.promote;
-    $('#sStats').className = 'ostats' + (on ? ' on' : '');
-    $('#sStats').innerHTML = STATS.map(([k,n])=>{ const v = me.stats[k]+(state.up[k]||0);
+    $('#sStats').className = 'ostats' + (on || fresh ? ' on' : '');
+    if (fresh){
+      const tot = Object.values(M.stats).reduce((a,b)=>a+b,0);
+      $('#sStats').innerHTML = STATS.map(([k,n])=>`<div class="sc"><span class="sn">${n}</span><div class="sv"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${M.stats[k]<=0?'disabled':''}>−</button><b>${M.stats[k]}</b><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${M.stats[k]>=10||tot>=25?'disabled':''}>＋</button></div></div>`).join('');
+      $('#sUpHint').textContent = tot===25 ? '合計25：割り振り完了' : `あと ${25-tot} 点割り振れます`;
+      $('#sUpHint').classList.toggle('warn', tot!==25);
+      const g = gross(); $('#sCost').innerHTML = `<span>所持 <b>${M.merit}</b></span><span>−</span><span>消費 <b>${g}</b></span><span>＝</span><span>残り <b class="${M.merit-g<0?'over':'ok'}">${M.merit-g}</b> P</span>`;
+      bind(); return;
+    }
+    $('#sStats').innerHTML = STATS.map(([k,n])=>{ const v = M.stats[k]+(state.up[k]||0);
       return `<div class="sc${state.up[k]?' raised':''}"><span class="sn">${n}</span><div class="sv"><button type="button" data-k="${k}" data-d="-1" aria-label="${n}を下げる" ${!on||!(state.up[k]>0)?'disabled':''}>−</button><b>${v}</b><button type="button" data-k="${k}" data-d="1" aria-label="${n}を上げる" ${!on||upTotal>=2||v>=20?'disabled':''}>＋</button></div></div>`; }).join('');
     // promotion is only offered while the merit left (after ship / equipment) still covers it
-    const rankCost = RANK_COST[me.rank] || 0, roomForPromo = me.merit - (calc() - (on ? rankCost : 0));
+    const rankCost = RANK_COST[M.rank] || 0, roomForPromo = M.merit - (calc() - (on ? rankCost : 0));
     const short = !on && nextRank && canPromote && roomForPromo < rankCost;
     $('#sPromote').disabled = !canPromote || !nextRank || short;
     $('#sPromote').closest('.ochk').classList.toggle('off', $('#sPromote').disabled);
@@ -1192,8 +1273,8 @@ function renderSortie(box){
       : short ? `功績Pが足りません（あと ${rankCost - roomForPromo}P）`
       : on ? `あと ${2-upTotal} 上げられます` : '昇進すると能力値を合計2上げられます';
     $('#sUpHint').classList.toggle('warn', !!short);
-    const g = gross(), rf = refund(), left = me.merit - g + rf;
-    $('#sCost').innerHTML = `<span>所持 <b>${me.merit}</b></span><span>−</span><span>消費 <b>${g}</b></span>${rf?`<span>＋</span><span title="${esc(shipOf(me.ship_code)?.name||'')}を下取り">下取り <b class="ok">${rf}</b></span>`:''}<span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
+    const g = gross(), rf = refund(), left = M.merit - g + rf;
+    $('#sCost').innerHTML = `<span>所持 <b>${M.merit}</b></span><span>−</span><span>消費 <b>${g}</b></span>${rf?`<span>＋</span><span title="${esc(shipOf(M.ship_code)?.name||'')}を下取り">下取り <b class="ok">${rf}</b></span>`:''}<span>＝</span><span>残り <b class="${left<0?'over':'ok'}">${left}</b> P</span>`;
     bind();
   };
   const bind = () => {
@@ -1202,10 +1283,18 @@ function renderSortie(box){
     $('#sShip').onchange = e => { state.ship = e.target.value; draw(); };
     $('#sEq').querySelectorAll('select').forEach(s=>s.onchange=()=>{ state.eq[+s.dataset.i] = s.value; draw(); });
     $('#sEq').querySelectorAll('.optb').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; state.pick.has(k)?state.pick.delete(k):state.pick.add(k); draw(); });
-    $('#sStats').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k; state.up[k]=(state.up[k]||0)+(+b.dataset.d); if(!state.up[k]) delete state.up[k]; draw(); });
+    $('#sStats').querySelectorAll('button').forEach(b=>b.onclick=()=>{ const k=b.dataset.k;
+      if (fresh){ M.stats[k] = Math.max(0, Math.min(10, M.stats[k] + (+b.dataset.d))); draw(); return; }
+      state.up[k]=(state.up[k]||0)+(+b.dataset.d); if(!state.up[k]) delete state.up[k]; draw(); });
   };
   $('#sPromote').onchange = e => { state.promote = e.target.checked; if(!state.promote) state.up = {}; draw(); };
+  if (fresh && !session) box.querySelectorAll('.ncauth .seg button').forEach(bt=>bt.onclick=()=>{ authMode = bt.dataset.m;
+    box.querySelectorAll('.ncauth .seg button').forEach(x=>x.setAttribute('aria-pressed', x.dataset.m===authMode));
+    $('#ncPass2W').hidden = authMode!=='signup'; $('#ncPassHint').textContent = authMode==='signup'?'6文字以上':'';
+    $('#ncPass').autocomplete = authMode==='signup'?'new-password':'current-password';
+    $('#sBtn').textContent = authMode==='signup' ? '出撃する（新規登録）' : '出撃する（ログイン）'; });
   draw();
+  if (fresh && newcomerErr){ const m = $('#sMsg'); m.className='msg err'; m.textContent = newcomerErr; newcomerErr = ''; }
 
   $('#sortie').onsubmit = async ev => {
     ev.preventDefault();
@@ -1213,7 +1302,38 @@ function renderSortie(box){
     if (!state.area){ msg.textContent='部隊（出撃エリア）を選んでください。'; return; }
     if (!state.ship){ msg.textContent='艦艇を選んでください。'; return; }
     if (state.promote && Object.values(state.up).reduce((a,b)=>a+b,0) !== 2){ msg.textContent='昇進するときは能力値を合計2上げてください。'; return; }
-    if (calc() > me.merit){ msg.textContent='功績Pが足りません。艦や装備を見直してください。'; return; }
+    if (calc() > M.merit){ msg.textContent='功績Pが足りません。艦や装備を見直してください。'; return; }
+    if (fresh){
+      const name = $('#ncName').value.trim(), tot = Object.values(M.stats).reduce((a,b)=>a+b,0);
+      if (!/^[ァ-ヶー・＝]{1,10}$/.test(name)){ msg.textContent='艦長の名前を全角カタカナ10文字以内で入れてください。'; $('#ncName').focus(); return; }
+      if (roster.some(r=>r.name===name)){ msg.textContent='その名前はすでに使われています。別の名前にしてください。'; $('#ncName').focus(); return; }
+      if (tot !== 25){ msg.textContent='能力値の合計を25にしてください。'; return; }
+      const draft = { name, gender: document.querySelector('input[name=ncGender]:checked').value, stats: {...M.stats},
+        order: { area: state.area, ship: state.ship, eq: optsOf(shipOf(state.ship)) ? [...state.pick] : [...new Set(state.eq.filter(Boolean))], stance: state.stance } };
+      $('#sBtn').disabled = true;
+      if (!session){
+        const email = $('#ncEmail').value.trim(), pass = $('#ncPass').value;
+        if (!email || !pass){ msg.textContent='登録用のメールアドレスとパスワードを入れてください。'; $('#sBtn').disabled=false; $('#ncEmail').focus(); return; }
+        if (authMode==='signup'){
+          if (pass.length < 6){ msg.textContent='パスワードは6文字以上にしてください。'; $('#sBtn').disabled=false; return; }
+          if (pass !== $('#ncPass2').value){ msg.textContent='確認用のパスワードが一致しません。'; $('#sBtn').disabled=false; return; }
+        }
+        msg.className='msg'; msg.textContent = authMode==='signup' ? '登録しています…' : 'ログインしています…';
+        const { data, error } = authMode==='signup' ? await sb.auth.signUp({ email, password: pass }) : await sb.auth.signInWithPassword({ email, password: pass });
+        if (error){ msg.className='msg err'; msg.textContent = AUTH_JA(error.message); $('#sBtn').disabled=false; return; }
+        if (!data.session){ savePending(draft); msg.className='msg ok';
+          msg.textContent = '確認メールを送りました。メール内のリンクを開いてログインすると、この出撃指示書がそのまま届きます（このブラウザに保存してあります）。'; $('#sBtn').disabled=false; return; }
+        session = data.session;
+        if (authMode==='login'){   // an account that already has a captain keeps it
+          const ex = await sb.from('characters').select('id').eq('season_id', SEASON).eq('user_id', session.user.id).maybeSingle();
+          if (ex.data){ await enterApp(); const m2 = $('#sMsg'); if (m2){ m2.className='msg'; m2.textContent='ログインしました。登録済みの艦長で出撃指示を出してください。'; } return; }
+        }
+      }
+      msg.className='msg'; msg.textContent = '艦長を登録して、出撃指示を送っています…';
+      const err = await submitNewcomer(draft);
+      if (err){ newcomerDraft = draft; newcomerErr = err; await enterApp(); return; }
+      newcomerDraft = null; pendingDone = true; await enterApp(); return;
+    }
     $('#sBtn').disabled = true; msg.className='msg'; msg.textContent = '送信しています…';
     const eq = optsOf(shipOf(state.ship)) ? [...state.pick] : [...new Set(state.eq.filter(Boolean))];
     const { data, error } = await sb.rpc('submit_order', { p_area: state.area, p_ship: state.ship, p_equipment: eq, p_wingman: null, p_promote: state.promote, p_stat_up: state.promote ? state.up : {}, p_free_action: '', p_stance: state.stance });
