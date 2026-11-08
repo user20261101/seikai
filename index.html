@@ -39,6 +39,10 @@ section{margin-top:30px}
 .brief .cwords{margin:4px 0 0;color:var(--ink);font-family:var(--f-head);line-height:1.9}
 .rpimg{margin:12px 0 4px}
 .rpimg img{display:block;width:100%;height:auto;border-radius:6px;border:1px solid var(--rule)}
+.ednote{margin-top:22px;border:1px solid var(--rule);border-left:4px solid var(--accent,#c9a227);border-radius:6px;padding:14px 16px;background:var(--panel,transparent)}
+.ednote .sh{margin:0 0 8px}
+.ednote p{margin:8px 0 0;font-size:14.5px;line-height:1.85}
+.ednote p:first-of-type{margin-top:0}
 .rpimg figcaption{font-size:12px;color:var(--sub);margin-top:6px;text-align:center}
 .story .storybox{background:var(--panel,rgba(255,255,255,.03));border:1px solid var(--rule);border-radius:8px;padding:18px 20px;font-family:var(--f-head);line-height:2.1;font-size:15px}
 .story .storybox::after{content:"";display:block;clear:both}
@@ -950,6 +954,7 @@ function renderReport(L = last, title = '前回の結果'){
       ${list.length?`<details><summary>戦闘記録（${list.length}名）</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th>艦長</th><th>艦</th><th>結果</th><th class="num">撃沈</th><th class="num">功績P</th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div></details>`:''}</article>`; }).join('')}</div>
     ${rp.mvp?`<div class="panel mvp" style="margin-top:12px"><div class="sh" style="margin:0 0 4px">最活躍</div><b class="mvpname">${esc(rp.mvp.rank)}　${esc(rp.mvp.name)}</b><p style="margin:4px 0 0;font-size:14px">${esc(rp.mvp.text)}</p></div>`:''}
     ${(rp.ranking||[]).length?`<div class="sh" style="margin-top:22px">活躍ランキング</div><ol class="rank">${rp.ranking.slice(0,RANK_TOP).map(id=>byId[id]).filter(Boolean).map(x=>`<li class="${me&&x.id===me.id?'mine':''}"><b>${esc(x.name)}</b><span class="r">${esc(x.area)} ${esc(aname(x.area))}　撃沈${x.kills}　+${x.merit}P</span></li>`).join('')}</ol>${(()=>{ const k = me ? rp.ranking.indexOf(me.id) : -1; return k >= RANK_TOP ? `<p class="note" style="margin:6px 0 0">あなたの順位：${k+1}位（全${rp.ranking.length}名中）</p>` : ''; })()}`:''}
+    ${(rp.editor_note||[]).length?`<aside class="ednote"><div class="sh">編集部ノート</div>${rp.editor_note.map(t=>`<p>${esc(t)}</p>`).join('')}</aside>`:''}
   </section>`;
 }
 
