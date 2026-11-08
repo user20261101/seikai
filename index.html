@@ -433,7 +433,7 @@ const whaleImg = n => /大型|マッコウ/.test(n)?IMG.whale_big:/小型|ミン
 const imgSrc = (v, fallback) => v && /^(https:|data:image\/|img\/[\w.-]+$)/.test(v) ? v : fallback;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [], lastOrder = null, myLetter = null;
+let SEASON = null, isAdmin = false; let sb, session = null, ep = null, last = null, epsAll = [], gauge = null, epNo = {}, me = null, myOrder = null, roster = [], myResults = [], lastOrder = null, myLetter = null, myOrders = {}, myLetters = {};
 const AUTH_JA = m => /Invalid login credentials/i.test(m) ? 'メールアドレスかパスワードが違います。'
   : /already registered|already been registered/i.test(m) ? 'このメールアドレスは登録済みです。「ログイン」から入ってください。'
   : /Password should be at least/i.test(m) ? 'パスワードは6文字以上にしてください。'
@@ -517,19 +517,23 @@ async function loadAll(){
   epsAll = er.data || []; epNo = Object.fromEntries(epsAll.map(x=>[x.id,x.no]));
   const r = await sb.from('characters').select('id,name,rank,state').eq('season_id', SEASON).order('id');
   roster = r.data || [];
-  me = null; myOrder = null; myResults = []; lastOrder = null; myLetter = null;
+  me = null; myOrder = null; myResults = []; lastOrder = null; myLetter = null; myOrders = {}; myLetters = {};
   const m = await sb.from('characters').select('*').eq('season_id', SEASON).eq('user_id', session.user.id).maybeSingle();
   me = m.data;
   if (me){
     if (ep){ const o = await sb.from('orders').select('*').eq('episode_id', ep.id).eq('character_id', me.id).maybeSingle(); myOrder = o.data; }
     const rs = await sb.from('results').select('episode_id,area,ship_code,outcome,merit_gained,kills,highlight').eq('character_id', me.id).order('episode_id',{ascending:false});
     myResults = rs.data || [];
-    if (last){
+    // my own orders and letters for every finished issue (owner-only by RLS) → each back issue gets its own 返信ハガキ
+    const doneIds = epsAll.filter(x=>x.status==='done').map(x=>x.id);
+    if (doneIds.length){
       const [lo, lt] = await Promise.all([
-        sb.from('orders').select('area,ship_code,equipment,stance,promote').eq('episode_id', last.id).eq('character_id', me.id).maybeSingle(),
-        sb.from('letters').select('body,notices').eq('episode_id', last.id).eq('character_id', me.id).maybeSingle()]);
-      lastOrder = lo.data || null; myLetter = lt.data || null;
+        sb.from('orders').select('episode_id,area,ship_code,equipment,stance,promote').in('episode_id', doneIds).eq('character_id', me.id),
+        sb.from('letters').select('episode_id,body,notices').in('episode_id', doneIds).eq('character_id', me.id)]);
+      for (const o of [].concat(lo.data||[])) myOrders[o.episode_id] = o;
+      for (const l of [].concat(lt.data||[])) myLetters[l.episode_id] = l;
     }
+    lastOrder = last ? myOrders[last.id] || null : null; myLetter = last ? myLetters[last.id] || null : null;
   }
   if (!loadAll.adminChecked){ const ia = await sb.rpc('is_admin'); isAdmin = !!ia.data; loadAll.adminChecked = true;
     if (isAdmin && !document.querySelector('#tabs a[data-v=admin]')){ const t = document.createElement('a'); t.href = '#admin'; t.dataset.v = 'admin'; t.textContent = '編集部'; $('#tabs').appendChild(t); $('#tabs').classList.add('six'); } }
@@ -601,7 +605,7 @@ function renderPaper(box, ref = false, E = ep, embed = false){
     // season over: the final issue opens with its result (and the ending) on top
     box.innerHTML = !ep && E === last
       ? letterCard() + (embed?'':issuesNav(E.no)) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
-      : issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
+      : issuesNav(E.no) + meta + (E.status==='done' ? letterCard(E) : '') + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
     box.innerHTML = letterCard() + (embed?'':issuesNav(E.no)) + epHead() + (embed?'':todoStrip()) + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
   }
@@ -962,14 +966,14 @@ function todoStrip(){
 /* ---------- 返信ハガキ：自分だけに届く前回の結果 ----------
    Only built for the signed-in captain from their own order (owner-only) and result.
    Editor-written text and special notices come from the private `letters` table (RLS: owner only). */
-function autoLetter(mine, A, lc, order){
+function autoLetter(mine, A, lc, order, no = last?.no){
   const shipObj = (lc.ships||[]).find(s=>s.name===mine.ship || s.code===order?.ship_code);
   const opts = shipObj?.options || lc.equipment || [];
   const eqs = (order?.equipment||[]).map(code=>opts.find(q=>q.code===code)).filter(Boolean);
   const fit = eqs.filter(q=>(A?.eq||[]).includes(q.type)), miss = eqs.filter(q=>!(A?.eq||[]).includes(q.type));
   const aname = A ? `${A.code} ${A.name}` : mine.area;
   const s = [];
-  s.push(`第${last.no}話、貴官の${mine.ship}は${aname}に出撃した。`);
+  s.push(`第${no}話、貴官の${mine.ship}は${aname}に出撃した。`);
   if (fit.length) s.push(`${fit.map(q=>q.name).join('と')}が宙域の状況によく合い、戦いを支えた。`);
   else if (eqs.length) s.push(`${eqs.map(q=>q.name).join('と')}を積んでいたが、この宙域で求められる装備（${(A?.eq||[]).join('・')}）とは噛み合わなかった。`);
   const pre = mine.stance==='積極' ? '前に出て' : mine.stance==='慎重' ? '距離を取りつつ' : '';
@@ -981,9 +985,11 @@ function autoLetter(mine, A, lc, order){
   if (A?.result) s.push(`${A.main?'主戦場となった':''}${A.name}の戦いは「${A.result}」に終わった。`);
   return s.join('');
 }
-function letterCard(){
-  if (!me || !last?.report?.judge) return '';
-  const rp = last.report, lc = last.content || {};
+function letterCard(L = last){
+  if (!me || !L?.report?.judge) return '';
+  const past = L.id !== last?.id;   // a back issue: only what happened then, nothing about the captain's state now
+  const myLetter = myLetters[L.id] || null, lastOrder = myOrders[L.id] || null;
+  const rp = L.report, lc = L.content || {};
   const mine = (rp.entries||[]).find(x=>x.id===me.id);
   if (!mine && !myLetter) return '';
   const A = mine ? (rp.judge.areas||[]).map(a=>({...a, ...((lc.areas||[]).find(x=>x.code===a.code)||{})})).find(a=>a.code===mine.area) : null;
@@ -995,31 +1001,31 @@ function letterCard(){
   if (mvp) N.push({kind:'honor', title:'最活躍士官', text:'今回もっとも活躍した士官として紙面で紹介されています。'});
   else if (pos && pos <= RANK_TOP) N.push({kind:'honor', title:`活躍ランキング ${pos}位`, text:'紙面のランキングに名前が載っています。'});
   for (const n of (myLetter?.notices||[])) N.push(n);
-  if (sortied && mine.outcome==='撃沈') N.push({kind:'warn', title:'艦を失いました', text:'次の出撃では艦を選び直してください。'});
-  if (me.injured) N.push({kind:'warn', title:'負傷中', text:'次の戦闘だけ、全能力値が1下がります。'});
+  if (sortied && mine.outcome==='撃沈') N.push({kind:'warn', title:'艦を失いました', text: past ? '艦は撃沈されましたが、脱出しています。' : '次の出撃では艦を選び直してください。'});
+  if (!past && me.injured) N.push({kind:'warn', title:'負傷中', text:'次の戦闘だけ、全能力値が1下がります。'});
   const next = RANKS[RANKS.indexOf(me.rank)+1], cost = RANK_COST[me.rank];
-  if (ep && next && cost && me.merit >= cost && (me.joined_no||0) < ep.no) N.push({kind:'good', title:'昇進できます', text:`${me.rank}→${next}（${cost}P）。出撃指示書で選べます。`});
-  const closing = mvp ? '司令部は貴官の奮戦を高く評価している。' : me.injured ? 'まずは傷を癒やし、次の作戦に備えられたい。'
+  if (!past && ep && next && cost && me.merit >= cost && (me.joined_no||0) < ep.no) N.push({kind:'good', title:'昇進できます', text:`${me.rank}→${next}（${cost}P）。出撃指示書で選べます。`});
+  const closing = mvp ? '司令部は貴官の奮戦を高く評価している。' : (past ? mine?.injured : me.injured) ? 'まずは傷を癒やし、次の作戦に備えられたい。'
     : sortied && mine.outcome==='撃沈' ? '新たな艦を手配し、次の作戦に備えられたい。' : sortied ? '次の作戦でも貴官の活躍を期待する。' : '';
-  const body = myLetter?.body || (sortied ? autoLetter(mine, A, lc, lastOrder) + closing
-    : `第${last.no}話では、貴官からの出撃指示は届かなかった。次の作戦では貴官の出撃を待っている。`);
+  const body = myLetter?.body || (sortied ? autoLetter(mine, A, lc, lastOrder, L.no) + closing
+    : `第${L.no}話では、貴官からの出撃指示は届かなかった。次の作戦では貴官の出撃を待っている。`);
   const stat = sortied ? `<dl class="pc-stats">
       <div><dt>部隊</dt><dd>${esc(mine.area)} ${esc(A?.name||'')}${A?.result?`<span class="pc-res">${esc(A.result)}</span>`:''}</dd></div>
       <div><dt>艦</dt><dd>${esc(mine.ship||'—')}　${mine.outcome==='撃沈'?'<b class="pc-bad">撃沈</b>':'帰還'}</dd></div>
       <div><dt>艦長</dt><dd>${mine.injured?'<b class="pc-bad">負傷</b>':'無事'}</dd></div>
       <div><dt>撃沈</dt><dd><b>${mine.kills}</b> 隻</dd></div>
       <div><dt>獲得功績P</dt><dd><b class="pc-big">+${mine.merit}</b></dd></div>
-      <div><dt>現在の功績P</dt><dd><b>${me.merit}</b></dd></div>
+      ${past?'':`<div><dt>現在の功績P</dt><dd><b>${me.merit}</b></dd></div>`}
     </dl>` : '';
   const ICON = {honor:'★', good:'▲', warn:'！', special:'◆', double_promotion:'◆', ship_grant:'◆'};
   const notes = N.length ? `<ul class="pc-notes">${N.map(n=>`<li class="pc-n-${esc(n.kind||'special')}"><span class="pc-ic" aria-hidden="true">${ICON[n.kind]||'◆'}</span><b>${esc(n.title||'特別通達')}</b>${n.text?`<span>${esc(n.text)}</span>`:''}</li>`).join('')}</ul>` : '';
   return `<section class="postcard" aria-label="あなただけの戦闘結果通知">
-    <div class="pc-head"><span class="pc-from">航宙軍司令部　戦闘結果通知</span><span class="pc-ep">第${last.no}話「${esc(last.title)}」</span><span class="pc-stamp" aria-hidden="true">親展</span></div>
-    <div class="pc-to">${esc(me.rank)}　<b>${esc(me.name)}</b>　殿</div>
+    <div class="pc-head"><span class="pc-from">航宙軍司令部　戦闘結果通知</span><span class="pc-ep">第${L.no}話「${esc(L.title)}」</span><span class="pc-stamp" aria-hidden="true">親展</span></div>
+    <div class="pc-to">${esc(past ? (mine?.rank||me.rank) : me.rank)}　<b>${esc(me.name)}</b>　殿</div>
     ${stat}${notes}
     <p class="pc-body">${esc(body)}</p>
     <div class="pc-sign">航宙軍司令部　イルカ中尉</div>
-    <div class="pc-foot">この欄はあなたにしか表示されません　<a href="#paper/${last.no}">第${last.no}話の紙面を読む</a></div>
+    <div class="pc-foot">この欄はあなたにしか表示されません${past?'':`　<a href="#paper/${L.no}">第${L.no}話の紙面を読む</a>`}</div>
   </section>`;
 }
 
