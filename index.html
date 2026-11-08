@@ -367,6 +367,23 @@ dl.lrow dd{margin:0}
 .pc-foot{margin-top:8px;padding-top:6px;border-top:1px solid #d3c7ae;font-size:11.5px;color:#7d735f;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px}
 .pc-foot a{color:#7a2e22}
 @media (max-width:520px){.pc-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.postcard{padding:14px 14px 10px}}
+
+.newships{margin:4px 0 16px;padding:12px;border:1px solid var(--warn);border-radius:8px;background:rgba(255,196,77,.06)}
+.newships-h{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:10px;font-size:14px}
+.nsgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.nscard{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--bg)}
+.nsimg{background:#f5f6f8;display:flex;align-items:center;justify-content:center;height:170px;padding:8px;overflow:hidden}
+.nsimg img{display:block;max-width:100%;max-height:154px;width:auto;height:auto;object-fit:contain}
+.nsbody{padding:10px 12px 12px}
+.nsname{font-family:var(--f-head);font-size:20px;font-weight:700;line-height:1.3}
+.nsclass{font-size:12.5px;color:var(--sub);margin-bottom:8px}
+.nsstats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:0 0 8px}
+.nsstats div{border:1px solid var(--rule);border-radius:5px;text-align:center;padding:3px 0}
+.nsstats dt{font-size:10.5px;color:var(--sub)}
+.nsstats dd{margin:0;font-size:17px;font-weight:700}
+.nsreq{font-size:12.5px;color:var(--warn);margin-bottom:6px}
+.nsdesc{font-size:13.5px;line-height:1.7;margin:0 0 6px}
+.nsrest{font-size:12.5px;color:var(--sub);margin:0 0 4px}
 </style>
 </head>
 <body>
@@ -536,7 +553,16 @@ function renderPaper(box, ref = false, E = ep){
   const areas = c.areas.map(a=>`<article class="area"><h3><span class="code">${esc(a.code)}</span>${esc(a.name)}</h3>
      <div class="tags"><span class="tag d-${esc(a.danger)}">危険度 ${esc(a.danger)}</span><span class="tag">推奨能力 ${a.rec.map(k=>esc(SNAME[k])).join('・')}</span><span class="tag">有効な装備 ${a.eq.map(esc).join('・')}</span>${a.main?'<span class="tag">主戦場</span>':''}</div>
      <p>${esc(a.desc)}</p></article>`).join('');
-  const ships = c.ships.map(s=>`<tr><td>${(s.img||IMG[s.code])?`<img class="shipimg" src="${imgSrc(s.img,IMG[s.code])}" alt="${esc(s.name)}">`:''}<b>${esc(s.name)}</b>${s.new?' <span class="newtag">新型</span>':''}<br><span class="note" style="margin:0">${esc(s.class)}　${esc(s.desc)}</span>${s.options?`<div class="opts"><span class="optl">選択装備（${s.option_max||2}つ）</span>${s.options.map((q,i)=>`<span class="opt" title="${esc(q.desc||'')}"><b>${'ABCDE'[i]}</b>${esc(q.name)}<i>${esc(q.type)}</i></span>`).join('')}</div>`:''}</td><td class="num">${esc(s.atk)}</td><td class="num">${esc(s.def)}</td><td class="num">${esc(s.mob)}</td><td class="num">${esc(s.cost)}</td></tr>`).join('');
+  const reqText = s => { const r = s.requires||{}; const out = []; if (r.rank) out.push(`${r.rank}以上`); for (const [k,v] of Object.entries(r.stats||{})) out.push(`${(STATS.find(x=>x[0]===k)||[k,k])[1]}${v}以上`); if (s.free_from) { const f = c.ships.find(x=>x.code===s.free_from); if (f) out.push(`${f.name}から無料で改修`); } return out.join('・'); };
+  const optChips = s => s.options?`<div class="opts"><span class="optl">選択装備（${s.option_max||2}つ）</span>${s.options.map((q,i)=>`<span class="opt" title="${esc(q.desc||'')}"><b>${'ABCDE'[i]}</b>${esc(q.name)}<i>${esc(q.type)}</i></span>`).join('')}</div>`:'';
+  const newShips = c.ships.filter(s=>s.new), oldShips = c.ships.filter(s=>!s.new);
+  const featured = newShips.length ? `<div class="newships"><div class="newships-h"><span class="newtag">新型艦</span>今回から配備された艦（${newShips.length}隻）</div><div class="nsgrid">${newShips.map(s=>`<article class="nscard">
+      ${(s.img||IMG[s.code])?`<div class="nsimg"><img src="${imgSrc(s.img,IMG[s.code])}" alt="${esc(s.name)}"></div>`:''}
+      <div class="nsbody"><div class="nsname">${esc(s.name)}</div><div class="nsclass">${esc(s.class)}</div>
+      <dl class="nsstats"><div><dt>攻撃</dt><dd>${esc(s.atk)}</dd></div><div><dt>防御</dt><dd>${esc(s.def)}</dd></div><div><dt>機動</dt><dd>${esc(s.mob)}</dd></div><div><dt>功績P</dt><dd>${esc(s.cost)}</dd></div></dl>
+      ${reqText(s)?`<div class="nsreq">条件：${esc(reqText(s))}</div>`:''}
+      <p class="nsdesc">${esc(s.desc)}</p>${optChips(s)}</div></article>`).join('')}</div></div>` : '';
+  const ships = oldShips.map(s=>`<tr><td>${(s.img||IMG[s.code])?`<img class="shipimg" src="${imgSrc(s.img,IMG[s.code])}" alt="${esc(s.name)}">`:''}<b>${esc(s.name)}</b>${s.new?' <span class="newtag">新型</span>':''}<br><span class="note" style="margin:0">${esc(s.class)}　${esc(s.desc)}</span>${reqText(s)?`<span class="note" style="margin:0;display:block">条件：${esc(reqText(s))}</span>`:''}${optChips(s)}</td><td class="num">${esc(s.atk)}</td><td class="num">${esc(s.def)}</td><td class="num">${esc(s.mob)}</td><td class="num">${esc(s.cost)}</td></tr>`).join('');
   const eqs = (c.equipment||[]).map(q=>`<tr><td><b>${esc(q.name)}</b>${q.new?' <span class="newtag">新装備</span>':''}<br><span class="note" style="margin:0">${esc(q.desc)}</span></td><td class="num">${esc(q.type)}</td><td class="num">${esc(q.cost)}</td></tr>`).join('');
   const enemies = (c.enemies||[]).map(x=>`<div class="enemy"><img src="${imgSrc(x.img,whaleImg(x.name))}" alt="${esc(x.name)}"><div><b>${esc(x.name)}</b>${x.new?' <span class="newtag">新型</span>':''}<p style="margin:2px 0">${esc(x.desc)}</p><p class="hint" style="margin:0">${esc(x.hint||'')}</p></div></div>`).join('') + (c.unknown_teaser!==false?`<div class="enemy"><img src="${IMG.whale_unknown}" alt="未確認艦のシルエット"><div><b>未確認艦</b><p style="margin:2px 0">交戦宙域の奥で、正体不明の大型反応が確認されている。</p></div></div>`:'');
   const current = `
@@ -546,7 +572,7 @@ function renderPaper(box, ref = false, E = ep){
       ${c.briefing?`<div class="brief"><img class="face" src="${IMG.iruka}" alt="イルカ中尉"><div><b style="color:var(--ink)">イルカ中尉</b><br>${esc(c.briefing)}</div></div>`:''}</div>
     <section data-sec="map"><div class="sh">戦略マップ</div>${mapSvg(c.areas, c)}</section>
     <section data-sec="areas"><div class="sh">出撃エリア</div><div class="areas">${areas}</div></section>
-    <section data-sec="ships"><div class="sh">艦艇</div><div class="tbl"><table><thead><tr><th>艦</th><th class="num">攻撃</th><th class="num">防御</th><th class="num">機動</th><th class="num">功績P</th></tr></thead><tbody>${ships}</tbody></table></div></section>
+    <section data-sec="ships"><div class="sh">艦艇</div>${featured}${newShips.length?'<div class="nsrest">これまでの艦</div>':''}<div class="tbl"><table><thead><tr><th>艦</th><th class="num">攻撃</th><th class="num">防御</th><th class="num">機動</th><th class="num">功績P</th></tr></thead><tbody>${ships}</tbody></table></div></section>
     ${c.equipment?.length?`<section data-sec="eq"><div class="sh">装備（1隻4つまで）</div><div class="tbl"><table><thead><tr><th>装備</th><th class="num">種別</th><th class="num">功績P</th></tr></thead><tbody>${eqs}</tbody></table></div></section>`:''}
     <section data-sec="enemy"><div class="sh">敵艦情報</div>${enemies}</section>`;
   if (ref){
