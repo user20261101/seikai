@@ -34,6 +34,16 @@ section{margin-top:30px}
 .panel{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:18px}
 .intro{font-family:var(--f-head);font-size:16px;line-height:2}
 .brief{display:grid;grid-template-columns:96px 1fr;gap:14px;margin-top:16px;font-size:14px;color:var(--sub);align-items:start}
+.brief.cmd{border-left:3px solid var(--accent,#c9a227);padding-left:12px}
+.brief .ctitle{display:block;font-size:12px;letter-spacing:.08em;color:var(--sub)}
+.brief .cwords{margin:4px 0 0;color:var(--ink);font-family:var(--f-head);line-height:1.9}
+.story .storybox{background:var(--panel,rgba(255,255,255,.03));border:1px solid var(--rule);border-radius:8px;padding:18px 20px;font-family:var(--f-head);line-height:2.1;font-size:15px}
+.story .storybox::after{content:"";display:block;clear:both}
+.story h3{margin:0 0 8px;font-size:19px}
+.story p{margin:0 0 .9em;text-indent:1em}
+.story p.q{text-indent:0}
+.story .storyimg{float:right;width:120px;height:150px;object-fit:cover;object-position:50% 10%;border-radius:6px;border:1px solid var(--rule);margin:0 0 10px 14px}
+@media(max-width:480px){.story .storyimg{width:84px;height:105px}}
 .brief .face{width:96px;height:120px;border-radius:6px;border:1px solid var(--rule);object-fit:cover;object-position:50% 8%;background:#f5f5f3}
 /* Illustrations from the original 星海戦記 (2025). Printed-paper tiles: light ground, thin rule */
 .mast{display:flex;gap:16px;align-items:center}
@@ -569,7 +579,9 @@ function renderPaper(box, ref = false, E = ep){
     <img class="hero" src="${imgSrc(c.hero,IMG.hero)}" alt="クジラ型艦と交戦する宙航軍の艦隊">
     <div class="sh">導入</div>
     <div class="panel"><p class="intro" style="margin:0">${esc(c.intro)}</p>
+      ${(c.commanders||[]).map(m=>`<div class="brief cmd"><img class="face" src="${imgSrc(m.img,IMG.iruka)}" alt="${esc(m.name)}"><div><span class="ctitle">${esc(m.title||'')}</span><b style="color:var(--ink)">${esc(m.name)}</b><p class="cwords">${esc(m.words)}</p></div></div>`).join('')}
       ${c.briefing?`<div class="brief"><img class="face" src="${IMG.iruka}" alt="イルカ中尉"><div><b style="color:var(--ink)">イルカ中尉</b><br>${esc(c.briefing)}</div></div>`:''}</div>
+    ${c.story?.text?`<section class="story" data-sec="story"><div class="sh">${esc(c.story.series||'セイ＝ハルカゼの航跡')}</div><div class="storybox">${c.story.img?`<img class="storyimg" src="${imgSrc(c.story.img,'')}" alt="セイ＝ハルカゼ">`:''}<h3>${esc(c.story.title||'')}</h3>${String(c.story.text).split(/\n+/).map(t=>`<p${/^[「『（]/.test(t)?' class="q"':''}>${esc(t)}</p>`).join('')}</div></section>`:''}
     <section data-sec="map"><div class="sh">戦略マップ</div>${mapSvg(c.areas, c)}</section>
     <section data-sec="areas"><div class="sh">出撃エリア</div><div class="areas">${areas}</div></section>
     <section data-sec="ships"><div class="sh">艦艇</div>${featured}${newShips.length?'<div class="nsrest">これまでの艦</div>':''}<div class="tbl"><table><thead><tr><th>艦</th><th class="num">攻撃</th><th class="num">防御</th><th class="num">機動</th><th class="num">功績P</th></tr></thead><tbody>${ships}</tbody></table></div></section>
