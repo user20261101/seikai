@@ -410,7 +410,7 @@ dl.lrow dd{margin:0}
       <button class="btn ghost sm" id="logout">ログアウト</button>
     </header>
     <nav class="tabs" id="tabs" aria-label="メニュー">
-      <a href="#sortie" data-v="sortie">出撃</a><a href="#home" data-v="home">司令部</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
+      <a href="#sortie" data-v="sortie">出撃</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
     </nav>
     <main id="view" aria-live="polite"></main>
   </div>
@@ -665,7 +665,7 @@ const GUIDE_STEPS = [
   ['紙面を読む','「出撃」タブを開くと、まず今回の紙面が載っています。4つの宙域の危険度・推奨能力・有効な装備、艦艇と装備の性能、敵艦の情報が載っています。どこが自分の艦長に向いているか、どこが手薄になりそうかを考えましょう。'],
   ['出撃指示書を出す','紙面の下（広い画面では右側）の出撃指示書で、部隊（宙域）・艦艇・装備（艦ごとの選択装備から2つ）・作戦方針（積極／標準／慎重）を選びます。功績Pが足りれば昇進もできます（参加した回の次の回から）。締切までは何度でも出し直せます。'],
   ['締切を待つ','締切が来ると受付が閉まり、編集部が判定します。能力・艦・装備に、その場の運が加わって戦いの行方が決まります。宙域の戦いには、敵味方のNPC艦隊も加わっています。'],
-  ['結果を読む','次の紙面の冒頭に前回の結果が載ります。宙域ごとの戦況、全艦長の戦闘記録、最活躍者、活躍ランキング。自分の結果は「司令部」と出撃指示書の下でも確認できます。'],
+  ['結果を読む','次の紙面の冒頭に前回の結果が載ります。宙域ごとの戦況、全艦長の戦闘記録、最活躍者、活躍ランキング。自分の結果は、出撃ページいちばん上の返信ハガキと、出撃指示書の下でも確認できます。'],
   ['次の作戦へ','獲得した功績Pで艦の乗り換えや装備の追加、昇進ができます。艦を撃沈されても艦長は脱出しています（負傷すると次の戦闘だけ能力が下がります）。艦を選び直して、次の作戦に臨みましょう。'],
 ];
 const PREWAR = [
@@ -859,7 +859,7 @@ async function renderAdmin(box, keep = false){
 }
 
 /* ---------- router ---------- */
-const VIEWS = ['home','paper','sortie','rank','guide','roster','admin'];
+const VIEWS = ['register','home','paper','sortie','rank','guide','roster','admin'];
 function route(){
   let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'sortie';   // first stop: the current issue + order form
   if (v==='paper' && (!arg || epsAll.find(x=>x.no===Number(arg))?.id===ep?.id)){ v = 'sortie'; arg = undefined; }
@@ -867,12 +867,13 @@ function route(){
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===tv ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (v==='roster') v = 'rank';
-  if (v==='admin' && !isAdmin) v = 'home';
+  if (v==='home') v = me ? 'sortie' : 'register';   // 司令部 tab retired: registered captains go to 出撃
+  if (v==='admin' && !isAdmin) v = 'sortie';
   if (v==='admin'){ document.body.classList.remove('split-on'); renderAdmin(box); window.scrollTo(0,0); return; }
   const canOrder = !!ep && !!me && me.state==='active';
   if (!me && v!=='paper' && v!=='sortie' && v!=='rank' && v!=='guide'){ renderRegister(box); return; }
   document.body.classList.toggle('split-on', v==='sortie' && canOrder);
-  if (v==='home') renderHome(box);
+  if (v==='register'){ if (me){ location.replace('#sortie'); return; } renderRegister(box); }
   else if (v==='paper'){ const bk = arg && epsAll.find(x=>x.no===Number(arg)); renderPaper(box, false, bk && bk.id!==ep?.id ? bk : (ep || last)); }
   else if (v==='sortie'){ if (canOrder) renderSortieView(box); else if (ep || last) renderPaper(box, false, ep || last); else box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; }
   else if (v==='guide') renderGuide(box);
@@ -949,8 +950,8 @@ function renderReport(L = last, title = '前回の結果'){
 function todoStrip(){
   if (!ep) return '';
   const dl = esc(dlText());
-  if (!me) return `<div class="todo-strip"><div><b>艦長を登録すると、この作戦に出撃できます</b><span>名前と能力値を決めるだけ。締切 ${dl}</span></div><a class="btn" href="#home">艦長を登録する</a></div>`;
-  if (me.state !== 'active') return '';
+  if (!me) return `<div class="todo-strip"><div><b>艦長を登録すると、この作戦に出撃できます</b><span>名前と能力値を決めるだけ。締切 ${dl}</span></div><a class="btn" href="#register">艦長を登録する</a></div>`;
+  if (me.state !== 'active') return `<div class="todo-strip warn"><div><b>今回は出撃できません</b><span>${esc({missing:'消息不明のため、今回は出撃できません',lost:'戦没',retired:'退役'}[me.state]||me.state)}</span></div></div>`;
   const o = myOrder;
   if (!o) return `<div class="todo-strip warn"><div><b>第${ep.no}話の出撃指示がまだです</b><span>締切 ${dl}　紙面を読んで、出撃する宙域を決めましょう</span></div><a class="btn" href="#sortie">出撃指示を出す</a></div>`;
   const a = ep.content.areas.find(x=>x.code===o.area), s = ep.content.ships.find(x=>x.code===o.ship_code);
