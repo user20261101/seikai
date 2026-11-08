@@ -410,7 +410,7 @@ dl.lrow dd{margin:0}
       <button class="btn ghost sm" id="logout">ログアウト</button>
     </header>
     <nav class="tabs" id="tabs" aria-label="メニュー">
-      <a href="#sortie" data-v="sortie">出撃</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
+      <a href="#paper" data-v="paper">紙面</a><a href="#sortie" data-v="sortie">出撃</a><a href="#rank" data-v="rank">ランキング</a><a href="#guide" data-v="guide">遊び方</a>
     </nav>
     <main id="view" aria-live="polite"></main>
   </div>
@@ -558,7 +558,7 @@ function mapSvg(areas, c = ep.content){
 
 function issuesNav(cur){
   if (epsAll.length < 2) return '';
-  return `<nav class="issues" aria-label="バックナンバー"><span class="il">バックナンバー</span>${epsAll.map(x=>`<a href="#${x.id===ep?.id?'sortie':'paper/'+x.no}" class="issue" ${x.no===cur?'aria-current="page"':''}>第${x.no}話<span>${esc(x.title)}${x.id===ep?.id?'（最新）':''}</span></a>`).join('')}</nav>`;
+  return `<nav class="issues" aria-label="バックナンバー"><span class="il">バックナンバー</span>${epsAll.map(x=>`<a href="#paper${x.id===ep?.id?'':'/'+x.no}" class="issue" ${x.no===cur?'aria-current="page"':''}>第${x.no}話<span>${esc(x.title)}${x.id===ep?.id?'（最新）':''}</span></a>`).join('')}</nav>`;
 }
 function renderPaper(box, ref = false, E = ep, embed = false){
   if (!E){ box.innerHTML = '<p class="note">次の作戦の発表をお待ちください。</p>'; return; }
@@ -599,10 +599,10 @@ function renderPaper(box, ref = false, E = ep, embed = false){
     const rpt = renderReport(E, 'この回の結果');
     // season over: the final issue opens with its result (and the ending) on top
     box.innerHTML = !ep && E === last
-      ? letterCard() + issuesNav(E.no) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
+      ? letterCard() + (embed?'':issuesNav(E.no)) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
       : issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
-    box.innerHTML = letterCard() + issuesNav(E.no) + epHead() + (embed?'':todoStrip()) + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
+    box.innerHTML = letterCard() + (embed?'':issuesNav(E.no)) + epHead() + (embed?'':todoStrip()) + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
   }
 }
 
@@ -662,7 +662,7 @@ function renderSortieView(box){
 /* ---------- 遊び方 (game guide): the flow of one episode + the war's timeline ---------- */
 const GUIDE_STEPS = [
   ['艦長を登録する','メールアドレスで登録し、士官登録をします。名前（全角カタカナ10文字まで）を決め、攻撃・操艦・指揮・工学・直感の5つの能力に合計25点を配分します。少尉、功績P20からのスタートです。'],
-  ['紙面を読む','「出撃」タブを開くと、まず今回の紙面が載っています。4つの宙域の危険度・推奨能力・有効な装備、艦艇と装備の性能、敵艦の情報が載っています。どこが自分の艦長に向いているか、どこが手薄になりそうかを考えましょう。'],
+  ['紙面を読む','「紙面」タブで今回の作戦を読みます（「出撃」タブにも今回の紙面が載っています）。過去の号も「紙面」タブのバックナンバーから読めます。4つの宙域の危険度・推奨能力・有効な装備、艦艇と装備の性能、敵艦の情報が載っています。どこが自分の艦長に向いているか、どこが手薄になりそうかを考えましょう。'],
   ['出撃指示書を出す','紙面の下（広い画面では右側）の出撃指示書で、部隊（宙域）・艦艇・装備（艦ごとの選択装備から2つ）・作戦方針（積極／標準／慎重）を選びます。功績Pが足りれば昇進もできます（参加した回の次の回から）。締切までは何度でも出し直せます。'],
   ['締切を待つ','締切が来ると受付が閉まり、編集部が判定します。能力・艦・装備に、その場の運が加わって戦いの行方が決まります。宙域の戦いには、敵味方のNPC艦隊も加わっています。'],
   ['結果を読む','次の紙面の冒頭に前回の結果が載ります。宙域ごとの戦況、全艦長の戦闘記録、最活躍者、活躍ランキング。自分の結果は、出撃ページいちばん上の返信ハガキと、出撃指示書の下でも確認できます。'],
@@ -678,7 +678,7 @@ function renderGuide(box, gate = false){
     ...PREWAR.map(([when,title,text])=>`<tr><th>${esc(when)}</th><td><b>${esc(title)}</b><p>${esc(text)}</p></td></tr>`),
     ...eps.map(x=>{ const c = x.content||{}; const rp = x.report||{};
       const st = x.status==='open' ? '<span class="pill ng">出撃受付中</span>' : x.status==='closed' ? '<span class="pill ng">判定中</span>' : rp.judge ? '' : '';
-      return `<tr><th>第${x.no}話</th><td><b><a href="#${x.id===ep?.id?'sortie':'paper/'+x.no}">${esc(x.title)}</a></b>　<span class="note" style="margin:0">${esc(c.place||'')}</span> ${st}
+      return `<tr><th>第${x.no}話</th><td><b><a href="#paper${x.id===ep?.id?'':'/'+x.no}">${esc(x.title)}</a></b>　<span class="note" style="margin:0">${esc(c.place||'')}</span> ${st}
         <p>${esc(rp.headline || (x.status==='open' ? '作戦進行中。あなたの出撃を待っている。' : ''))}</p>
         ${rp.ending?`<p class="tl-end">${esc(rp.ending.label||'')}「${esc(rp.ending.title||'')}」</p>`:''}</td></tr>`; }),
     ...Array.from({length: total - eps.length}, (_,i)=>`<tr class="tl-lock"><th>第${eps.length+i+1}話</th><td><b>？？？</b><p>未公開</p></td></tr>`),
@@ -862,8 +862,7 @@ async function renderAdmin(box, keep = false){
 const VIEWS = ['register','home','paper','sortie','rank','guide','roster','admin'];
 function route(){
   let [v, arg] = location.hash.slice(1).split('/'); if (!VIEWS.includes(v)) v = 'sortie';   // first stop: the current issue + order form
-  if (v==='paper' && (!arg || epsAll.find(x=>x.no===Number(arg))?.id===ep?.id)){ v = 'sortie'; arg = undefined; }
-  const tv = v==='paper' ? 'sortie' : v;
+  const tv = v;
   document.querySelectorAll('#tabs a').forEach(a=> a.dataset.v===tv ? a.setAttribute('aria-current','page') : a.removeAttribute('aria-current'));
   const box = $('#view');
   if (v==='roster') v = 'rank';
@@ -875,7 +874,7 @@ function route(){
   document.body.classList.toggle('split-on', v==='sortie' && canOrder);
   if (v==='register'){ if (me){ location.replace('#sortie'); return; } renderRegister(box); }
   else if (v==='paper'){ const bk = arg && epsAll.find(x=>x.no===Number(arg)); renderPaper(box, false, bk && bk.id!==ep?.id ? bk : (ep || last)); }
-  else if (v==='sortie'){ if (canOrder) renderSortieView(box); else if (ep || last) renderPaper(box, false, ep || last); else box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; }
+  else if (v==='sortie'){ if (canOrder) renderSortieView(box); else if (ep || last) renderPaper(box, false, ep || last, true); else box.innerHTML = '<p class="note">現在、受付中の作戦はありません。</p>'; }
   else if (v==='guide') renderGuide(box);
   else renderRanking(box, arg);
   window.scrollTo(0,0);
