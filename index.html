@@ -37,6 +37,9 @@ section{margin-top:30px}
 .brief.cmd{border-left:3px solid var(--accent,#c9a227);padding-left:12px}
 .brief .ctitle{display:block;font-size:12px;letter-spacing:.08em;color:var(--sub)}
 .brief .cwords{margin:4px 0 0;color:var(--ink);font-family:var(--f-head);line-height:1.9}
+.rpimg{margin:12px 0 4px}
+.rpimg img{display:block;width:100%;height:auto;border-radius:6px;border:1px solid var(--rule)}
+.rpimg figcaption{font-size:12px;color:var(--sub);margin-top:6px;text-align:center}
 .story .storybox{background:var(--panel,rgba(255,255,255,.03));border:1px solid var(--rule);border-radius:8px;padding:18px 20px;font-family:var(--f-head);line-height:2.1;font-size:15px}
 .story .storybox::after{content:"";display:block;clear:both}
 .story h3{margin:0 0 8px;font-size:19px}
@@ -935,6 +938,7 @@ function renderReport(L = last, title = '前回の結果'){
   return `<section class="report" style="margin-top:0">${ending}<div class="sh"${ending?' style="margin-top:22px"':''}>${title}　第${L.no}話「${esc(L.title)}」</div>
     <div class="panel">
       <h3 class="headline">${esc(rp.headline||'')}</h3>
+      ${rp.img?`<figure class="rpimg"><img src="${imgSrc(rp.img,'')}" alt="${esc(rp.img_caption||rp.headline||'戦闘の挿絵')}" loading="lazy">${rp.img_caption?`<figcaption>${esc(rp.img_caption)}</figcaption>`:''}</figure>`:''}
       <p style="margin:8px 0 0">${esc(rp.summary||'')}</p>
       ${g0!=null?`<div class="gauge" role="img" aria-label="戦況ゲージ ${g0}から${g1}"><span class="gl">戦況</span><div class="gbar"><i style="width:${g1}%"></i><b style="left:${g0}%"></b></div><span class="gv">${g0} → <b>${g1}</b></span></div>
       <div class="note" style="margin-top:2px">右へ伸びるほど航宙軍が優勢。最終話の結末を左右します</div>`:''}
