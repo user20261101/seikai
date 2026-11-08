@@ -584,7 +584,7 @@ function renderPaper(box, ref = false, E = ep){
     const rpt = renderReport(E, 'この回の結果');
     // season over: the final issue opens with its result (and the ending) on top
     box.innerHTML = !ep && E === last
-      ? issuesNav(E.no) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
+      ? letterCard() + issuesNav(E.no) + meta + rpt + '<div class="sh" style="margin-top:34px">この回の作戦</div>' + current
       : issuesNav(E.no) + meta + current + (rpt ? `<div style="margin-top:40px">${rpt}</div>` : '');
   } else {
     box.innerHTML = letterCard() + issuesNav(E.no) + epHead() + todoStrip() + renderReport() + (last?'<div class="sh" style="margin-top:34px">今回の作戦</div>':'') + current;
